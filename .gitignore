@@ -1,0 +1,6 @@
+__pycache__/
+.project
+.pydevproject
+.settings/
+unittest/package/test/cppknife-0.6.3/
+unittest/package/test/cppknife-0.6.3.deb

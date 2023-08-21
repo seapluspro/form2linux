@@ -1,0 +1,34 @@
+{
+  "Variables": {
+    "SERVICE": "examplesv",
+    "SCRIPT_NODE": "%(SERVICE)",
+    "SCRIPT": "/usr/local/bin/%(SCRIPT_NODE)"
+  },
+  "Service": {
+    "Name": "%(SERVICE)",
+    "Description": "A example service doing nothing.",
+    "File": "/tmp/%(SERVICE).service",
+    "User": "nobody1",
+    "Group": "nobody1",
+    "WorkingDirectory": "/tmp",
+    "EnvironmentFile": "-/etc/%(SERVICE)/%(SERVICE).env",
+    "ExecStart": "%(SCRIPT) daemon",
+    "ExecReload": "%(SCRIPT) reload",
+    "SyslogIdentifier": "%(SERVICE)",
+    "StandardOutput": "syslog",
+    "StandardError": "syslog",
+    "Restart": "always",
+    "RestartSec": 5
+  },
+  "Directories": [
+    "/usr/local/bin",
+    "/var/log/local",
+    "/etc/%(SERVICE)"
+  ],
+  "Files": {
+    "scripts/%(SCRIPT_NODE)": "/etc/%(SERVICE)/"
+  },
+  "Links": {
+    "/etc/%(SERVICE)/": "/usr/local/bin/%(SERVICE)"
+  }
+}

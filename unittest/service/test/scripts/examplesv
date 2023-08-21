@@ -1,0 +1,16 @@
+#! /bin/bash
+case "$1" in
+daemon)
+  echo "start daemon"
+  while true; do
+     echo "ping"
+    sleep 600
+  done
+  ;;
+reload)
+  ;;
+*)
+  echo "unknown command: $1"
+  ;;
+esac
+

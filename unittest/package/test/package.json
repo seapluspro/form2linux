@@ -1,0 +1,56 @@
+{
+  "Variables": {
+     "VERSION": "0.6.3",
+     "BASE": "usr/share/cppknife-%(VERSION)"
+  },
+  "Project": {
+    "Package": "cppknife",
+    "Version": "%(VERSION)",
+    "Architecture": "amd64",
+    "Maintainer": "SeaPlusPro <seapluspro@gmail.com>",
+    "Replaces": "",
+    "Depends": {
+      "libc6": ">= 2.36",
+      "libgdal-dev": ""
+      },
+    "Provides": "*",
+    "Suggests": [
+      "cppknife-db"
+      ],
+    "Homepage": "https://github.com/seapluspro/cppknife",
+    "Description": "Shared libraries for C++ programming and tools using that.",
+    "Notes": [
+      "The heart is the shared library libcppknife as a helper for fast programming a command line C++ program.",
+      "Also there are the programs textknife, fileknife, geoknife, sesknife, osknife which demonstrate the usage of the library."
+    ]
+  },
+  "Directories": [
+    "usr/lib",
+    "usr/local/bin",
+    "usr/share",
+    "%(BASE)"
+    ],
+  "Files": {
+    "../build.release/libcppknife-%(VERSION).so": "%(BASE)/libcppknife-%(VERSION).so",
+    "../build.release/libcppknifegeo-%(VERSION).so": "%(BASE)/",
+    "../build.release/fileknife": "%(BASE)/",
+    "../build.release/textknife": "%(BASE)/",
+    "../build.release/sesknife": "%(BASE)/",
+    "../basic/*.hpp": "%(BASE)/basic/",
+    "../db/*.hpp": "%(BASE)/db/",
+    "../core/*.hpp": "%(BASE)/core/",
+    "../net/*.hpp": "%(BASE)/net/",
+    "../geo/*.hpp": "%(BASE)/geo/",
+    "../text/*.hpp": "%(BASE)/text/",
+    "../tools/*.hpp": "%(BASE)/tools/"
+  },
+  "Links": {
+    "%(BASE)/libcppknife-%(VERSION).so": "usr/lib/libcppknife-%(VERSION).so",
+    "%(BASE)/libcppknifegeo-%(VERSION).so": "usr/lib/libcppknifegeo-%(VERSION).so",
+    "%(BASE)/fileknife": "usr/local/bin/fileknife-%(VERSION)",
+    "%(BASE)/textknife": "usr/local/bin/textknife-%(VERSION)",
+    "%(BASE)/sesknife": "usr/local/bin/sesknife-%(VERSION)"
+  },
+  "PostInstall": "postinst2"
+}
+

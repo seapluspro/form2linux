@@ -1,0 +1,26 @@
+#! /bin/bash
+echo "examplesv"
+PATH=/sbin:/usr/sbin:/bin:/usr/bin
+function Daemon(){
+  while true; do
+    echo "ping"
+    sleep 3600
+  done
+}
+function Stop(){
+  killall $0
+}
+case "$1" in
+  "daemon")
+    Daemon
+    ;;
+  "restart")
+    Stop
+    Daemon
+  "stop":
+    Stop
+    ;;
+  *)
+    echo "+++ usage: $0 { daemon | restart }"
+    ;;
+esac
