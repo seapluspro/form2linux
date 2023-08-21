@@ -6,12 +6,13 @@ The components must be defined in a Json form.
 
 ### Usage
 ```
-usage: form2linux package [-h] {example,check,build} ...
+usage: Form2Linux.py package [-h] {example,check,build} ...
 
 positional arguments:
   {example,check,build}
                         package help
-    example             shows an example configuration file. Can be used for initializing a new package project.
+    example             shows an example configuration file. Can be used for
+                        initializing a new package project.
     check               checks the configuration file
     build               builds the debian package
 
@@ -86,8 +87,10 @@ The call <code>form2linux package example</code> shows:
     "%(BASE)/textknife": "usr/local/bin/textknife-%(VERSION)",
     "%(BASE)/sesknife": "usr/local/bin/sesknife-%(VERSION)"
   },
-  "PostInstall": "postinst2"
+  "PostInstall": "postinst2",
+  "PostRemove": ""
 }
+
 ```
 
 ### Description:

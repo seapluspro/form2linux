@@ -1,0 +1,3 @@
+#! /bin/sh
+BASE=/usr/share/form2linux
+PYTHONPATH=$BASE $BASE/Form2Linux.py $*

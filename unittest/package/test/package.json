@@ -51,6 +51,7 @@
     "%(BASE)/textknife": "usr/local/bin/textknife-%(VERSION)",
     "%(BASE)/sesknife": "usr/local/bin/sesknife-%(VERSION)"
   },
-  "PostInstall": "postinst2"
+  "PostInstall": "postinst2",
+  "PostRemove": ""
 }
 

@@ -1,0 +1,45 @@
+{
+  "Variables": {
+     "VERSION": "0.1.2",
+     "PROJECT": "form2linux",
+     "BASE": "usr/share/%(PROJECT)"
+  },
+  "Project": {
+    "Package": "%(PROJECT)",
+    "Version": "%(VERSION)",
+    "Architecture": "all",
+    "Maintainer": "SeaPlusPro <seapluspro@gmail.com>",
+    "Replaces": "",
+    "Depends": {
+      },
+    "Provides": "*",
+    "Suggests": [
+      ],
+    "Homepage": "https://github.com/seapluspro/form2linux",
+    "Description": "Executes linux tasks defined by a Json form.",
+    "Notes": [
+      "The following tasks are available:",
+      "package: creates a Debian package archive",
+      "service: installs a SystemD service"
+    ]
+  },
+  "Directories": [
+    "%(BASE)"
+    ],
+  "Files": {
+    "scripts/%(PROJECT)": "usr/local/bin/",
+    "../Form2Linux.py": "%(BASE)/",
+    "../base/*.py": "%(BASE)/base/",
+    "../text/*.py": "%(BASE)/text/",
+    "../doc/package.md": "%(BASE)/doc/",
+    "../doc/service.md": "%(BASE)/doc/",
+    "../README.md": "%(BASE)/",
+    "scripts/prerm": "DEBIAN/"
+  },
+  "Links": {
+    "%(BASE)/README.md": "%(BASE)/doc/form2linux.md"
+  },
+  "PostInstall": "",
+  "PostRemove": ""
+}
+

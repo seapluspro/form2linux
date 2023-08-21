@@ -1,0 +1,8 @@
+#! /bin/bash
+set -e
+PATH=/usr/bin:/bin
+BASE=/usr/share/form2linux
+for dir in base text; do
+  rm -Rf $BASE/$dir/__pycache__
+done
+rm -f $BASE/doc/form2linux.md

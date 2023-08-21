@@ -16,7 +16,7 @@ The Python script form2task is a command line tool with the following options:
 
 ## form2task -h
 ```
-usage: form2linux [-h] [-v] [-V] [-y] {package,service} ...
+usage: Form2Linux.py [-h] [-v] [-V] [-y] {package,service,text} ...
 
 form2linux -- shortdesc
 
@@ -34,19 +34,24 @@ Examples:
 form2linux --help
 
 form2linux package example
+form2linux package example package.json
 form2linux package build package.json
 
 form2linux service example
-form2linux service build service.json
+form2linux service example service.json
+form2linux service install service.json
 
 positional arguments:
-  {package,service}  sub-command help
-    package          Builds a debian package from a package description in Json format.
-    service          Installs a SystemD service.
+  {package,service,text}
+                        sub-command help
+    package             Builds a debian package from a package description in
+                        Json format.
+    service             Installs a SystemD service.
+    text                Some text manipulation.
 
 options:
-  -h, --help         show this help message and exit
-  -v, --verbose      set verbosity level [default: None]
-  -V, --version      show program's version number and exit
-  -y, --dry          do not create files and directories
+  -h, --help            show this help message and exit
+  -v, --verbose         set verbosity level [default: None]
+  -V, --version         show program's version number and exit
+  -y, --dry             do not create files and directories
 ```

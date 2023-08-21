@@ -32,34 +32,39 @@ import sys
 import re
 import os
 import shutil
-import text.jsonutils as jsonutils
-import base.MemoryLogger
-import base.ProcessHelper
 import json
 import subprocess
 import fnmatch
 import pwd
 import grp
+import text.jsonutils as jsonutils
+import base.MemoryLogger
+import base.ProcessHelper
+import base.StringUtils
 from argparse import ArgumentParser
 from argparse import RawDescriptionHelpFormatter
 
 
 __all__ = []
-__version__ = 0.1
+__version__ = "0.1.2"
 __date__ = '2023-08-20'
-__updated__ = '2023-08-20'
+__updated__ = '2023-08-21'
 
 DEBUG = 1
 TESTRUN = 0
 PROFILE = 0
 
+
 class CLIError(Exception):
     '''Generic exception to raise and log different fatal errors.'''
+
     def __init__(self, msg):
         super(CLIError).__init__(type(self))
         self.msg = 'E: %s' % msg
+
     def __str__(self):
         return self.msg
+
     def __unicode__(self):
         return self.msg
 
@@ -78,6 +83,12 @@ class Form2Linux:
         self._dry = dry
         self._logger = base.MemoryLogger.MemoryLogger(1)
         self._processHelper = base.ProcessHelper.ProcessHelper(self._logger)
+        self._standardDirectories = ('boot', 'dev', 'etc', 'etc/default', 'home', 'lib',
+                                     'media', 'opt', 'run', 'sys',
+                                     'tmp',
+                                     'usr', 'usr/bin', 'usr/lib', 'usr/sbin', 'usr/share',
+                                     'var', 'var/cache', 'var/lib', 'var/spool',
+                                     )
 
     def error(self, message):
         self._logger.error(message)
@@ -90,6 +101,8 @@ class Form2Linux:
             match = regExpr.match(name)
             if match is not None:
                 raise CLIError(f'wrong character "{match.group(1)}" in directory name: {item}')
+            if name.startswith('/'):
+                name = name[1:]
             self._dirs.append(name)
 
     def checkFiles(self):
@@ -140,7 +153,7 @@ class Form2Linux:
                 fullTarget = os.path.join(targetDirectory, node)
                 self.info(f'{fullSource} -> {fullTarget}')
                 self.copyFile(fullSource, fullTarget)
-        
+
     def finishVariables(self):
         for no in range(2):
             for key in self._variables:
@@ -218,6 +231,7 @@ class Form2Linux:
         value = self.replaceVariables(value)
         return value
 
+
 class DebianBuilder (Form2Linux):
     def __init__(self, verbose: bool, dry: bool):
         Form2Linux.__init__(self, verbose, dry)
@@ -236,6 +250,7 @@ class DebianBuilder (Form2Linux):
         self._sizeFiles = 0
         self._installedDirs = []
         self._postInstall = None
+        self._postRemove = None
 
     def build(self, configuration: str):
         self.check(configuration)
@@ -244,7 +259,7 @@ class DebianBuilder (Form2Linux):
         self.buildFiles()
         self.buildOtherFiles()
         self.checkLinksLate()
-        output = subprocess.check_output(['/usr/bin/dpkg', '-b', self._baseDirectory, 
+        output = subprocess.check_output(['/usr/bin/dpkg', '-b', self._baseDirectory,
                                           f'{self._baseDirectory}_{self._architecture}.deb'])
         self.log(output.decode('utf-8'))
 
@@ -305,10 +320,12 @@ Description: {desc}''')
                 fp.write('''#! /bin/bash
 set -e
 PATH=/usr/bin:/bin:/usr/sbin:/sbin
+if [ "$1" = configure ]; then
 ''')
                 if len(self._installedDirs) > 0:
                     for item in self._installedDirs:
-                        fp.write(f'test -d /{item} || mkdir -p /{item}\n')
+                        if item not in self._standardDirectories:
+                            fp.write(f'test -d /{item} || mkdir -p /{item}\n')
                 if len(self._links) > 0:
                     for item in self._links:
                         target = self._links[item]
@@ -319,73 +336,106 @@ PATH=/usr/bin:/bin:/usr/sbin:/sbin
                             del partsTarget[0]
                             del partsSource[0]
                         relLink = '../' * (len(partsTarget) - 1) + '/'.join(partsSource)
-                        fp.write(f'test -L /{target} || ln -s /{target} {relLink}\n')
-                if self._postInstall != '':
+                        fp.write(f'test -L /{target} || ln -s {relLink} /{target}\n')
+                if self._postInstall is not None and self._postInstall != '':
                     with open(self._postInstall, 'r') as fp2:
                         contents = fp2.read()
                         lines = 1 + contents.count('\n')
                         self.info(f'read: {self._postInstall} with {lines} line(s)')
                     fp.write(contents)
+                fp.write('fi\n')
+                self.info(f'written: {name}')
+
+            os.chmod(name, 0o775)
+
+    def buildPostRm(self):
+        sumLength = (0 if self._postRemove == '' else 1) + len(self._installedDirs) + len(self._links)
+        if sumLength > 0:
+            name = f'{self._baseDirectory}/DEBIAN/postrm'
+            with open(name, 'w') as fp:
+                fp.write('''#! /bin/bash
+set -e
+PATH=/usr/bin:/bin:/usr/sbin:/sbin
+if [ "$1" = configure ]; then
+''')
+                if self._postRemove is not None and self._postRemove != '':
+                    with open(self._postRemove, 'r') as fp2:
+                        contents = fp2.read()
+                        lines = 1 + contents.count('\n')
+                        self.info(f'read: {self._postRemove} with {lines} line(s)')
+                    fp.write(contents)
+                if len(self._links) > 0:
+                    for item in self._links:
+                        target = self._links[item]
+                        fp.write(f'test -L /{target} && rm -f /{target}\n')
+                if len(self._installedDirs) > 0:
+                    sorted = self._installedDirs[:]
+                    sorted.sort(key=lambda x: -len(x))
+                    for item in sorted:
+                        if item not in self._standardDirectories:
+                            fp.write(f'test -d /{item} && rmdir /{item}\n')
+                fp.write('fi\n')
                 self.info(f'written: {name}')
             os.chmod(name, 0o775)
-            
+
     def buildOtherFiles(self):
         self.buildPostInstall()
+        self.buildPostRm()
 
     def check(self, configuration: str):
         self.log(f'current directory: {os.getcwd()}')
         with open(configuration, 'r') as fp:
             data = fp.read()
-            try:
-                self._root = root = json.loads(data)
-                path = 'Project:m Directories:a Files:m Links:m PostInstall:s'
-                jsonutils.checkJsonMapAndRaise(root, path, True, 'Variables:m')
-                project = root['Project']
-                path = 'Package:s Version:s Architecture:s Provides:s Replaces:s Suggests:a Maintainer:s ' + \
-                    'Depends:m Homepage:s Description:s Notes:a'
-                jsonutils.checkJsonMapAndRaise(project, path, True, 'Variables')
-                variables = root['Variables']
-                for name in variables:
-                    self.setVariable(name, variables[name])
-                self.finishVariables()
-                self._package = self.valueOf('Project Package')
-                if not re.match(r'^[\w-]+$', self._package):
-                    raise CLIError(f'wrong Project.Package: {self._package}')
-                self._version = self.valueOf('Project Version')
-                if not re.match(r'^\d+\.\d+\.\d+$', self._version):
-                    raise CLIError(f'wrong Project.Version: {self._version}')
-                self._architecture = self.valueOf('Project Architecture')
-                if not re.match(r'^(amd64|arm64|all)$', self._architecture):
-                    raise CLIError(f'wrong Project.Architecture: {self._architecture}')
-                self._maintainer = self.valueOf('Project Maintainer')
-                self._postInstall = self.valueOf('PostInstall')
-                if self._postInstall != '' and not os.path.exists(self._postInstall):
-                    raise CLIError(f'PostInstall file not found: {self._postInstall}')
-                depends = self.valueOf('Project Depends', 'm')
-                for key in depends:
-                    value = depends[key]
-                    if value != '':
-                        if not re.match(r'^[<>=]* ?\d+\.\d+', value):
-                            raise CLIError(f'wrong Project.Dependency: {key}: {value}')
-                    self._depends[key] = value
-                self._provides = self.valueOf('Project Provides')
-                if self._provides == '' or self._provides == '*':
-                    self._provides = self._package
-                self._replaces = self.valueOf('Project Replaces')
-                self._homepage = self.valueOf('Project Homepage')
-                if not re.match(r'^https?://', self._homepage):
-                    raise CLIError('wrong Project.Homepage: {self._homepage}')
-                self._description = self.valueOf('Project Description')
-                notices = self.valueOf('Project Notes', 'a')
-                for notice in notices:
-                    self._notes.append(notice)
-                self.log(f'= configuration syntax is OK: {configuration}')
-                self.checkFiles()
-                self.checkDirectories()
-                self.checkLinks()
-                #self.checkLinks()
-            except Exception as exc:
-                self.error(f'{exc}')
+            self._root = root = json.loads(data)
+            path = 'Project:m Directories:a Files:m Links:m PostInstall:s PostRemove:s'
+            jsonutils.checkJsonMapAndRaise(root, path, True, 'Variables:m')
+            project = root['Project']
+            path = 'Package:s Version:s Architecture:s Provides:s Replaces:s Suggests:a Maintainer:s ' + \
+                'Depends:m Homepage:s Description:s Notes:a'
+            jsonutils.checkJsonMapAndRaise(project, path, True, 'Variables')
+            variables = root['Variables']
+            for name in variables:
+                self.setVariable(name, variables[name])
+            self.finishVariables()
+            self._package = self.valueOf('Project Package')
+            if not re.match(r'^[\w-]+$', self._package):
+                raise CLIError(f'wrong Project.Package: {self._package}')
+            self._version = self.valueOf('Project Version')
+            if not re.match(r'^\d+\.\d+\.\d+$', self._version):
+                raise CLIError(f'wrong Project.Version: {self._version}')
+            self._architecture = self.valueOf('Project Architecture')
+            if not re.match(r'^(amd64|arm64|all)$', self._architecture):
+                raise CLIError(f'wrong Project.Architecture: {self._architecture}')
+            self._maintainer = self.valueOf('Project Maintainer')
+            self._postInstall = self.valueOf('PostInstall')
+            if self._postInstall != '' and not os.path.exists(self._postInstall):
+                raise CLIError(f'PostInstall file not found: {self._postInstall}')
+            self._postRemove = self.valueOf('PostRemove')
+            if self._postRemove != '' and not os.path.exists(self._postRemove):
+                raise CLIError(f'PostRemove file not found: {self._postRemove}')
+            depends = self.valueOf('Project Depends', 'm')
+            for key in depends:
+                value = depends[key]
+                if value != '':
+                    if not re.match(r'^[<>=]* ?\d+\.\d+', value):
+                        raise CLIError(f'wrong Project.Dependency: {key}: {value}')
+                self._depends[key] = value
+            self._provides = self.valueOf('Project Provides')
+            if self._provides == '' or self._provides == '*':
+                self._provides = self._package
+            self._replaces = self.valueOf('Project Replaces')
+            self._homepage = self.valueOf('Project Homepage')
+            if not re.match(r'^https?://', self._homepage):
+                raise CLIError('wrong Project.Homepage: {self._homepage}')
+            self._description = self.valueOf('Project Description')
+            notices = self.valueOf('Project Notes', 'a')
+            for notice in notices:
+                self._notes.append(notice)
+            self.log(f'= configuration syntax is OK: {configuration}')
+            self.checkFiles()
+            self.checkDirectories()
+            self.checkLinks()
+            # self.checkLinks()
 
     def findFiles(self, base):
         nodes = os.listdir(base)
@@ -398,6 +448,7 @@ PATH=/usr/bin:/bin:/usr/sbin:/sbin
                     self.findFiles(full)
             elif base != self._baseDirectory:
                 self._sizeFiles += os.path.getsize(full)
+
 
 class ServiceBuilder (Form2Linux):
     def __init__(self, verbose: bool, dry: bool):
@@ -487,7 +538,7 @@ WantedBy=multi-user.target
                 self.checkFiles()
                 self.checkDirectories()
                 self.checkLinks()
-                #self.checkLinks()
+                # self.checkLinks()
             except Exception as exc:
                 self.error(f'{exc}')
 
@@ -500,7 +551,7 @@ WantedBy=multi-user.target
         self.runProgram(f'systemctl enable {self._name}', True)
         self.runProgram(f'systemctl start {self._name}', True)
         self.runProgram(f'systemctl status {self._name}', True)
-    
+
     def prepareUser(self):
         try:
             pwd.getpwnam(self._user)
@@ -511,6 +562,101 @@ WantedBy=multi-user.target
         except KeyError:
             self.runProgram(f'groupadd --system {self._user}', True)
 
+class TextTool (Form2Linux):
+    def __init__(self, verbose: bool, dry: bool):
+        Form2Linux.__init__(self, verbose, dry)
+        
+    def replaceRange(self, document: str, replacement: str, fileReplacement: str, 
+                     anchor: str, start: str, end: str, minLength: int, newline: bool):
+        if replacement is None and fileReplacement is None:
+            raise CLIError('missing --replacement or --file')
+        if replacement is not None and fileReplacement is not None:
+            raise CLIError('only one option is allowed: --replacement or --file')
+        if fileReplacement is not None:
+            replacement = base.StringUtils.fromFile(fileReplacement)
+        else:
+            if newline:
+                replacement += '\n'
+        try:
+            regexAnchor = None if anchor is None or anchor == '' else re.compile(anchor)
+        except Exception as exc:
+            self.error(f'error in anchor regular expression: {exc}')
+        if start is None or start == '':
+            raise CLIError('start must not be empty')
+        try:
+            regexStart = re.compile(start)
+        except Exception as exc:
+            self.error(f'error in start regular expression: {exc}')
+        if end is None or end == '':
+            raise CLIError('end must not be empty')
+        try:
+            regexEnd = re.compile(end)
+        except Exception as exc:
+            self.error(f'error in end regular expression: {exc}')
+        with open(document, "r") as fp:
+            topOfDocument = ''
+            tailOfDocument = ''
+            oldRange = ''
+            state = 'anchor' if regexAnchor is None else 'top'
+            for line in fp:
+                if state == 'top':
+                    topOfDocument += line
+                    if regexAnchor.search(line) is not None:
+                        state = 'anchor'
+                elif state == 'anchor':
+                    match = regexStart.search(line)
+                    if match is None:
+                        topOfDocument += line
+                    else:
+                        endPos = match.end(0)
+                        topOfDocument += line[0:endPos]
+                        oldRange = '' if len(line) == endPos else line[endPos:]
+                        if oldRange == '\n':
+                            oldRange = ''
+                            topOfDocument += '\n'
+                        match = regexEnd.search(oldRange)
+                        if match is None:
+                            state = 'range'
+                        else:
+                            pos = match.start(0)
+                            if pos == 0:
+                                tailOfDocument = oldRange
+                                oldRange = ''
+                            else:
+                                tailOfDocument = oldRange[pos:]
+                                oldRange = oldRange[0:pos]
+                            state = 'tail'
+                elif state == 'range':
+                    match = regexEnd.search(line)
+                    if match is None:
+                        oldRange += line
+                    else:
+                        if match.pos > 0:
+                            oldRange += line[0:match.pos]
+                        tailOfDocument = line[match.pos:]
+                        state = 'tail'
+                else:
+                    tailOfDocument += line
+            if state == 'top':
+                raise CLIError(f'missing anchor: {anchor}')
+            if state == 'anchor':
+                raise CLIError(f'missing start "{start}')
+            if state == 'range':
+                raise CLIError(f'missing end "{end}')
+        if oldRange == replacement:
+            self.info(f'{document}: new and old content are equal. Nothing changed.')
+        else:
+            with open(document, "w") as fp:
+                fp.write(topOfDocument)
+                fp.write(replacement)
+                fp.write(tailOfDocument)
+                oldCount = oldRange.count('\n')
+                newCount = replacement.count('\n')
+                if oldCount == 1 and newCount == 1:
+                    self.info(f'{document}: {len(oldRange)} characters have been replaced by {len(replacement)} characters')
+                else:
+                    self.info(f'{document}: {oldCount} lines have been replaced by {newCount} lines')
+            
 def examplePackage():
     print('''{
   "Variables": {
@@ -565,9 +711,12 @@ def examplePackage():
     "%(BASE)/textknife": "usr/local/bin/textknife-%(VERSION)",
     "%(BASE)/sesknife": "usr/local/bin/sesknife-%(VERSION)"
   },
-  "PostInstall": "postinst2"
+  "PostInstall": "postinst2",
+  "PostRemove": ""
 }
 ''')
+
+
 def exampleService():
     print('''{
   "Variables": {
@@ -594,7 +743,6 @@ def exampleService():
   },
   "Directories": [
     "/usr/local/bin",
-    "/var/log/local",
     "/etc/%(SERVICE)"
   ],
   "Files": {
@@ -606,7 +754,8 @@ def exampleService():
 }
 ''')
 
-def main(argv=None): # IGNORE:C0111
+
+def main(argv=None):  # IGNORE:C0111
     '''Command line options.'''
 
     if argv is None:
@@ -637,7 +786,7 @@ form2linux package build package.json
 
 form2linux service example
 form2linux service example service.json
-form2linux service build service.json
+form2linux service install service.json
 
 ''' % (program_shortdesc, str(__date__))
 
@@ -653,7 +802,7 @@ form2linux service build service.json
             'package', help='Builds a debian package from a package description in Json format.')
         subparsersPackage = parserPackage.add_subparsers(
             help='package help', dest='package')
-        
+
         parserExample = subparsersPackage.add_parser(
             'example', help='shows an example configuration file. Can be used for initializing a new package project.')
         parserCheck = subparsersPackage.add_parser(
@@ -679,6 +828,26 @@ form2linux service build service.json
             'install', help='Installs a systemd service defined by a Json configuration file.')
         parserInstallService.add_argument(
             'configuration', help='defines the properties of the service.', default='service.json')
+
+        parserText = subparsersMain.add_parser(
+            'text', help='Some text manipulation.')
+        subparsersText = parserText.add_subparsers(
+            help='text help', dest='text')
+        parserReplaceRange = subparsersText.add_parser(
+            'replace-range', help='replaces a section in text document with a string or a file.')
+        parserReplaceRange.add_argument(
+            'document', help='the document to change.')
+        parserReplaceRange.add_argument('-f', '--file', dest='file', help="the file contents is the replacement. Exclusive alternative: --replacement")
+        parserReplaceRange.add_argument('-r', '--replacement', dest='replacement', help="defines the replacement as string. Exclusive alternative: --file")
+        parserReplaceRange.add_argument('-s', '--start', dest='start', help="a regular expression starting the range to change.", default="```")
+        parserReplaceRange.add_argument('-e', '--end', dest='end', help="a regular expression ending the range to change.", default="```")
+        parserReplaceRange.add_argument('-a', '--anchor', dest='anchor',
+                                      help="a regular expression defining the position of the text change. Than the next range is replaced by the program's output.", 
+                                      default=None)
+        parserReplaceRange.add_argument('-m', '--min-length', dest='minLength', help="the replacement or replacement file must have at least that length",
+                                        default=3)
+        parserReplaceRange.add_argument('-n', '--newline', action="store_true", dest='newline', help="add a newline at the --replacement string")
+
         # Process arguments
         args = parser.parse_args(argv[1:])
 
@@ -706,6 +875,16 @@ form2linux service build service.json
                 builder.install(args.configuration)
             else:
                 raise CLIError(f'unknown command: {args.package}')
+        elif args.main == 'text':
+            if args.text == 'replace-range':
+                builder = TextTool(verbose, dry)
+                builder.replaceRange(args.document, args.replacement, args.file, 
+                                     args.anchor, args.start, args.end, args.minLength,
+                                     args.newline)
+            else:
+                raise CLIError(f'unknown command: {args.text}')
+        else:
+            raise CLIError(f'unknown command: {args.main}')
         return 0
     except KeyboardInterrupt:
         ### handle keyboard interrupt ###
@@ -717,6 +896,7 @@ form2linux service build service.json
         sys.stderr.write(program_name + ': ' + repr(e) + '\n')
         sys.stderr.write(indent + '  for help use --help')
         return 2
+
 
 if __name__ == '__main__':
     sys.exit(main())

@@ -6,14 +6,16 @@ The components must be defined in a Json form.
 
 ### Usage
 ```
-usage: form2linux service [-h] {example,check,install} ...
+usage: Form2Linux.py service [-h] {example,check,install} ...
 
 positional arguments:
   {example,check,install}
                         service help
-    example             shows an example configuration file. Can be used as template for a new service.
+    example             shows an example configuration file. Can be used as
+                        template for a new service.
     check               checks the configuration file
-    install             Installs a systemd service defined by a Json configuration file.
+    install             Installs a systemd service defined by a Json
+                        configuration file.
 
 options:
   -h, --help            show this help message and exit
@@ -55,7 +57,6 @@ form2linux service install service.json
   },
   "Directories": [
     "/usr/local/bin",
-    "/var/log/local",
     "/etc/%(SERVICE)"
   ],
   "Files": {
@@ -65,6 +66,7 @@ form2linux service install service.json
     "/etc/%(SERVICE)/": "/usr/local/bin/%(SERVICE)"
   }
 }
+
 ```
 
 #### Variables

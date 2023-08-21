@@ -1,0 +1,23 @@
+#! /bin/bash
+VERSION=$(grep "^__version__ = " ../Form2Linux.py | grep -o "[0-9][0-9.]*")
+echo "Version: $VERSION"
+OUTPUT=/tmp/form2linux.data
+function ChangeMd(){
+  local file=$1
+  local mode=$2
+  local noexample=$3
+  form2linux $mode --help >$OUTPUT
+  form2linux -v text replace-range ../doc/$file --file=$OUTPUT "--anchor=^###.Usage"
+  if [ "$noexample" != noexample ]; then
+    form2linux $mode example >$OUTPUT
+    form2linux -v text replace-range ../doc/$file --file=$OUTPUT "--anchor=^###.The.Form"
+  fi
+}
+if [ a = a ]; then
+form2linux -v text replace-range package.json --replacement=$VERSION --anchor=Variables '--start=VERSION":."' '--end="'
+ChangeMd package.md package
+ChangeMd service.md service
+ChangeMd text.md text noexample
+form2linux -v package build package.json
+mv -v form2linux-*.deb ../releases
+fi
