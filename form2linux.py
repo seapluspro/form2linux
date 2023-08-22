@@ -38,9 +38,9 @@ from ServiceBuilder import ServiceBuilder
 from Builder import CLIError
 
 __all__ = []
-__version__ = "0.1.3"
+__version__ = "0.1.4"
 __date__ = '2023-08-20'
-__updated__ = '2023-08-21'
+__updated__ = '2023-08-22'
 
 DEBUG = 1
 TESTRUN = 0

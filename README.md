@@ -6,9 +6,15 @@ The following tasks are available:
 - Build a debian package
 - Install a SystemD service
 
+## Debian Package
+There are Debian packages for each version of the project.
+See debian/packages.
+
 ## Links
-[Dokumentation "package"](doc/package.md)
-[Dokumentation "service"](doc/service.md)
+- [Dokumentation "package"](doc/package.md)
+- [Dokumentation "service"](doc/service.md)
+- [Dokumentation "text"](doc/text.md)
+
 
 ## Usage
 The Python script form2task is a command line tool with the following options:

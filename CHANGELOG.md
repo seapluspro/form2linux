@@ -1,5 +1,10 @@
 # Changelog
 
+# [0.1.4] - 2023-08-22
+
+## Added
+- Debian packages
+
 # [0.1.3] - 2023-08-22
 
 ## Changed

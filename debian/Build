@@ -19,5 +19,5 @@ ChangeMd package.md package
 ChangeMd service.md service
 ChangeMd text.md text noexample
 form2linux -v package build package.json
-mv -v form2linux-*.deb ../releases
+mv -v form2linux-*.deb packages/
 fi
