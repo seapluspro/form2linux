@@ -6,7 +6,7 @@ The components must be defined in a Json form.
 
 ### Usage
 ```
-usage: Form2Linux.py service [-h] {example,check,install} ...
+usage: form2linux.py service [-h] {example,check,install} ...
 
 positional arguments:
   {example,check,install}

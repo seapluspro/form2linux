@@ -6,7 +6,7 @@ The components must be defined in a Json form.
 
 ### Usage
 ```
-usage: Form2Linux.py package [-h] {example,check,build} ...
+usage: form2linux.py package [-h] {example,check,build} ...
 
 positional arguments:
   {example,check,build}
@@ -61,13 +61,10 @@ The call <code>form2linux package example</code> shows:
     ]
   },
   "Directories": [
-    "usr/lib",
-    "usr/local/bin",
-    "usr/share",
     "%(BASE)"
     ],
   "Files": {
-    "../build.release/libcppknife-%(VERSION).so": "%(BASE)/libcppknife-%(VERSION).so",
+    "../build.release/libcppknife-%(VERSION).so": "%(BASE)/",
     "../build.release/libcppknifegeo-%(VERSION).so": "%(BASE)/",
     "../build.release/fileknife": "%(BASE)/",
     "../build.release/textknife": "%(BASE)/",
@@ -81,11 +78,11 @@ The call <code>form2linux package example</code> shows:
     "../tools/*.hpp": "%(BASE)/tools/"
   },
   "Links": {
-    "%(BASE)/libcppknife-%(VERSION).so": "usr/lib/libcppknife-%(VERSION).so",
-    "%(BASE)/libcppknifegeo-%(VERSION).so": "usr/lib/libcppknifegeo-%(VERSION).so",
-    "%(BASE)/fileknife": "usr/local/bin/fileknife-%(VERSION)",
-    "%(BASE)/textknife": "usr/local/bin/textknife-%(VERSION)",
-    "%(BASE)/sesknife": "usr/local/bin/sesknife-%(VERSION)"
+    "%(BASE)/libcppknife-%(VERSION).so": "usr/lib/",
+    "%(BASE)/libcppknifegeo-%(VERSION).so": "usr/lib/",
+    "%(BASE)/fileknife": "usr/local/bin/",
+    "%(BASE)/textknife": "usr/local/bin/",
+    "%(BASE)/sesknife": "usr/local/bin/"
   },
   "PostInstall": "postinst2",
   "PostRemove": ""

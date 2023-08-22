@@ -4,7 +4,7 @@ The task "Text" offers text manipulation.
 
 ### Usage
 ```
-usage: Form2Linux.py text [-h] {replace-range} ...
+usage: form2linux.py text [-h] {replace-range} ...
 
 positional arguments:
   {replace-range}  text help
