@@ -5,6 +5,6 @@ __pycache__/
 unittest/package/test/cppknife-0.6.3/
 unittest/package/test/cppknife-0.6.3.deb
 /debian/form2linxux-*/
-*.deb
 debian/form2linux-0.1.4/
 /.CHANGELOG.md.swp
+unittest/package/test/cppknife-0.6.3_amd64.deb
