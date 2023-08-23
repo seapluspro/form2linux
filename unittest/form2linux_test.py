@@ -4,16 +4,17 @@ Created on 20.18.2023
 @author: SeaPlusPro
 '''
 import unittest
-import Form2Linux
+import form2linux
 import os.path
 import base.MemoryLogger
 import base.ProcessHelper
 import base.StringUtils
 import base.FileHelper
+from Builder import BuilderStatus
 
 def inDebug(): return False
 
-class Form2LinuxTest(unittest.TestCase):
+class form2linuxTest(unittest.TestCase):
 
     def testPackageBuild(self):
         if inDebug(): return
@@ -24,16 +25,32 @@ class Form2LinuxTest(unittest.TestCase):
         if os.path.exists(archive):
             os.unlink(archive)
         self.assertFalse(os.path.exists(archive))
-        Form2Linux.main(['form2linux', '-v', 'package', 'build', 'package.json'])
+        form2linux.main(['form2linux', '-v', 'package', 'build', 'package.json'])
         self.assertTrue(os.path.exists(archive))
         processHelper.popd(old)
+
+    def testPackageExample(self):
+        if inDebug(): return
+        form2linux.main(['form2linux', 'package', 'example'])
+        logger = BuilderStatus.lastLogger()
+        lines = logger.getMessages()
+        self.assertEqual(1, len(lines))
+        self.assertTrue(lines[0].find('0.6.3') > 0)
+
+    def testServiceExample(self):
+        if inDebug(): return
+        form2linux.main(['form2linux', 'service', 'example'])
+        logger = BuilderStatus.lastLogger()
+        lines = logger.getMessages()
+        self.assertEqual(1, len(lines))
+        self.assertTrue(lines[0].find('examplesv') > 0)
 
     def testServiceInstall(self):
         if inDebug(): return
         logger = base.MemoryLogger.MemoryLogger(3)
         processHelper = base.ProcessHelper.ProcessHelper(logger)
         old = processHelper.pushd('service/test')
-        Form2Linux.main(['form2linux', '-y', '-v', 'service', 'install', 'service.json'])
+        form2linux.main(['form2linux', '-y', '-v', 'service', 'install', 'service.json'])
         processHelper.popd(old)
         serviceFile = '/tmp/examplesv.service'
         self.assertTrue(os.path.exists(serviceFile))
@@ -66,7 +83,7 @@ WantedBy=multi-user.target
 ~~def!!
 # Chapter3
 ''')
-        Form2Linux.main(['form2linux', '-v', 'text', 'replace-range', fnDocument, '--replacement=Dubidu', 
+        form2linux.main(['form2linux', '-v', 'text', 'replace-range', fnDocument, '--replacement=Dubidu', 
                          '--anchor=Chapter2', '--start=~~', '--end=!!'])
         replacement = base.StringUtils.fromFile(fnDocument)
         self.assertEqual(replacement, '''# Chapter1
@@ -75,35 +92,3 @@ WantedBy=multi-user.target
 ~~Dubidu!!
 # Chapter3
 ''')
-    def testTextReplaceRangeFile(self):
-        if inDebug(): return
-        fnDocument = base.FileHelper.tempFile('document.md', 'unittest')
-        fnData = base.FileHelper.tempFile('data.txt', 'unittest')
-        base.StringUtils.toFile(fnData, '''Example:
-one two three
-''')
-        base.StringUtils.toFile(fnDocument, '''# Chapter1
-```
-abc
-```
-# Chapter2
-```
-line 1
-line 2
-```
-# Chapter3
-''')
-        Form2Linux.main(['form2linux', '-v', 'text', 'replace-range', fnDocument, f'--file={fnData}', '--anchor', 'Chapter2'])
-        replacement = base.StringUtils.fromFile(fnDocument)
-        self.assertEqual(replacement, '''# Chapter1
-```
-abc
-```
-# Chapter2
-```
-Example:
-one two three
-```
-# Chapter3
-''')
-

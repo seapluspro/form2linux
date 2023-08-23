@@ -1,5 +1,14 @@
 # Changelog
 
+# [0.2.1] - 2023-08-24
+
+## Added
+- new mode setup
+    - adapt-users, add-standard-users, example-add-standard-users
+    - patch-shadow, archive, example-archive
+- mode package + service: subcommand "example" known now option --file
+- FileHelper: expandFiles(), expandWildcards()
+
 # [0.1.4] - 2023-08-22
 
 ## Added

@@ -601,6 +601,30 @@ def extendedAttributesOf(path):
     return rc
 
 
+def expandFiles(path: str, pattern: str, dirsOnly: bool=False, filesOnly: bool=True):
+    '''Finds the nodes of a given path matching a given pattern.
+    @param path: the nodes of that directory will be inspected
+    @param pattern: a pattern with shell wildcards "*", "?", "[a-z]"
+    @param dirsOnly: only directories may be in the result
+    @param filesOnly: only directories may be in the result
+    @return a list of nodes
+    '''
+    rc = []
+    try:
+        files = os.listdir(path)
+        isDir = False
+        checkDir = dirsOnly or filesOnly
+        for file in files:
+            if checkDir:
+                isDir = os.path.isdir(f'{path}/{file}')
+            if filesOnly and isDir or dirsOnly and not isDir:
+                continue
+            if fnmatch.fnmatch(file, pattern):
+                rc.append(file)
+    except PermissionError as exc:
+        _error(f'cannot enter directory {path}: {exc}')
+    return rc
+
 def expandPathPlaceholders(pattern, filename):
     '''Expands placeholders in a pattern with the current date time or parts of a related filename.
     @param pattern: a string with placeholders:
@@ -633,6 +657,49 @@ def expandPathPlaceholders(pattern, filename):
         pattern = pattern.replace(macro, value)
     return pattern
 
+
+def expandWildcards(path: str, nodesList: str, names):
+    '''Expands a path with wildcards and a list of nodes with wildcards into a list of concrete names.
+    @param path: that path will inspected. Can have wildcards.
+    @param nodesList: a comma separated list of nodes with or without wildcards
+    @param names: OUT: a list of concrete full filenames matching the path and the nodeList
+    '''
+    unprocessed = [path]
+    processed = []
+    def dirName(x): return x if not x.endswith('/') else x[0:-1]
+    while len(unprocessed) > 0:
+        item = dirName(unprocessed[0])
+        unprocessed = unprocessed[1:]
+        if not hasWildcards(item):
+            if os.path.isdir(item):
+                processed.append(item)
+        else:
+            items = item.split('/')
+            for ix in range(len(items)):
+                part = items[ix]
+                if hasWildcards(part):
+                    prefix = '' if ix == 0 else '/'.join(items[0:ix])
+                    if os.path.isdir(prefix):
+                        nodes = expandFiles(prefix, part, True, False)
+                        suffix = '' if ix >= len(items) - 1 else '/'.join(items[ix+1:])
+                        for node in nodes:
+                            unprocessed.append(f'{prefix}/{node}/{suffix}')
+                        # Handle only the first wildcard:
+                        break
+    nodesList2 = nodesList.split(',')
+    for path2 in processed:
+        path2 = dirName(path2)
+        for node in nodesList2:
+            if not hasWildcards(node):
+                full = f'{path2}/{node}'
+                if os.path.exists(full):
+                    names.append(full)
+            else:
+                nodes2 = expandFiles(path2, node, False)
+                for node3 in nodes2:
+                    full = f'{path2}/{node3}'
+                    if os.path.exists(full):
+                        names.append(full)
 
 def fileClass(path):
     '''Returns the file class of the file.

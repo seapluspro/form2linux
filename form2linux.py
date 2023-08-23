@@ -35,111 +35,17 @@ from argparse import RawDescriptionHelpFormatter
 from PackageBuilder import PackageBuilder
 from TextTool import TextTool
 from ServiceBuilder import ServiceBuilder
+from SetupBuilder import SetupBuilder
 from Builder import CLIError
 
 __all__ = []
-__version__ = "0.1.4"
+__version__ = "0.2.1"
 __date__ = '2023-08-20'
 __updated__ = '2023-08-22'
 
 DEBUG = 1
 TESTRUN = 0
 PROFILE = 0
-
-
-def examplePackage():
-    print('''{
-  "Variables": {
-     "VERSION": "0.6.3",
-     "BASE": "usr/share/cppknife-%(VERSION)"
-  },
-  "Project": {
-    "Package": "cppknife",
-    "Version": "%(VERSION)",
-    "Architecture": "amd64",
-    "Maintainer": "SeaPlusPro <seapluspro@gmail.com>",
-    "Replaces": "",
-    "Depends": {
-      "libc6": ">= 2.36",
-      "libgdal-dev": ""
-      },
-    "Provides": "*",
-    "Suggests": [
-      "cppknife-db"
-      ],
-    "Homepage": "https://github.com/seapluspro/cppknife",
-    "Description": "Shared libraries for C++ programming and tools using that.",
-    "Notes": [
-      "The heart is the shared library libcppknife as a helper for fast programming a command line C++ program.",
-      "Also there are the programs textknife, fileknife, geoknife, sesknife, osknife which demonstrate the usage of the library."
-    ]
-  },
-  "Directories": [
-    "%(BASE)"
-    ],
-  "Files": {
-    "../build.release/libcppknife-%(VERSION).so": "%(BASE)/",
-    "../build.release/libcppknifegeo-%(VERSION).so": "%(BASE)/",
-    "../build.release/fileknife": "%(BASE)/",
-    "../build.release/textknife": "%(BASE)/",
-    "../build.release/sesknife": "%(BASE)/",
-    "../basic/*.hpp": "%(BASE)/basic/",
-    "../db/*.hpp": "%(BASE)/db/",
-    "../core/*.hpp": "%(BASE)/core/",
-    "../net/*.hpp": "%(BASE)/net/",
-    "../geo/*.hpp": "%(BASE)/geo/",
-    "../text/*.hpp": "%(BASE)/text/",
-    "../tools/*.hpp": "%(BASE)/tools/"
-  },
-  "Links": {
-    "%(BASE)/libcppknife-%(VERSION).so": "usr/lib/",
-    "%(BASE)/libcppknifegeo-%(VERSION).so": "usr/lib/",
-    "%(BASE)/fileknife": "usr/local/bin/",
-    "%(BASE)/textknife": "usr/local/bin/",
-    "%(BASE)/sesknife": "usr/local/bin/"
-  },
-  "PostInstall": "postinst2",
-  "PostRemove": ""
-}
-''')
-
-
-def exampleService():
-    print('''{
-  "Variables": {
-    "SERVICE": "examplesv",
-    "USER": "nobody",
-    "SCRIPT_NODE": "%(SERVICE)",
-    "SCRIPT": "/usr/local/bin/%(SCRIPT_NODE)"
-  },
-  "Service": {
-    "Name": "%(SERVICE)",
-    "Description": "A example service doing nothing.",
-    "File": "/etc/systemd/system/%(SERVICE).service",
-    "User": "%(USER)",
-    "Group": "%(USER)",
-    "WorkingDirectory": "/tmp",
-    "EnvironmentFile": "-/etc/%(SERVICE)/%(SERVICE).env",
-    "ExecStart": "%(SCRIPT) daemon",
-    "ExecReload": "%(SCRIPT) reload",
-    "SyslogIdentifier": "%(SERVICE)",
-    "StandardOutput": "syslog",
-    "StandardError": "syslog",
-    "Restart": "always",
-    "RestartSec": 5
-  },
-  "Directories": [
-    "/usr/local/bin",
-    "/etc/%(SERVICE)"
-  ],
-  "Files": {
-    "scripts/%(SCRIPT_NODE)": "/etc/%(SERVICE)/"
-  },
-  "Links": {
-    "/etc/%(SERVICE)/": "/usr/local/bin/%(SERVICE)"
-  }
-}
-''')
 
 
 def main(argv=None):  # IGNORE:C0111
@@ -150,7 +56,8 @@ def main(argv=None):  # IGNORE:C0111
     program_name = os.path.basename(argv[0])
     program_version = 'v%s' % __version__
     program_build_date = str(__updated__)
-    program_version_message = '%%(prog)s %s (%s)' % (program_version, program_build_date)
+    program_version_message = '%%(prog)s %s (%s)' % (
+        program_version, program_build_date)
     program_shortdesc = __import__('__main__').__doc__.split('\n')[1]
     program_license = '''%s
 
@@ -179,12 +86,17 @@ form2linux service install service.json
 
     try:
         # Setup argument parser
-        parser = ArgumentParser(description=program_license, formatter_class=RawDescriptionHelpFormatter)
-        parser.add_argument('-v', '--verbose', dest='verbose', action='count', help='set verbosity level [default: %(default)s]')
-        parser.add_argument('-V', '--version', action='version', version=program_version_message)
-        parser.add_argument('-y', '--dry', dest='dry', action="store_true", help="do not create files and directories")
+        parser = ArgumentParser(
+            description=program_license, formatter_class=RawDescriptionHelpFormatter)
+        parser.add_argument('-v', '--verbose', dest='verbose', action='count',
+                            help='set verbosity level [default: %(default)s]')
+        parser.add_argument('-V', '--version', action='version',
+                            version=program_version_message)
+        parser.add_argument('-y', '--dry', dest='dry', action="store_true",
+                            help="do not create files and directories")
 
-        subparsersMain = parser.add_subparsers(help='sub-command help', dest='main')
+        subparsersMain = parser.add_subparsers(
+            help='sub-command help', dest='main')
         parserPackage = subparsersMain.add_parser(
             'package', help='Builds a debian package from a package description in Json format.')
         subparsersPackage = parserPackage.add_subparsers(
@@ -192,6 +104,8 @@ form2linux service install service.json
 
         parserExample = subparsersPackage.add_parser(
             'example', help='shows an example configuration file. Can be used for initializing a new package project.')
+        parserExample.add_argument('-f', '--file', dest='file',
+                            help='the output is stored in that file')
         parserCheck = subparsersPackage.add_parser(
             'check', help='checks the configuration file')
         parserCheck.add_argument(
@@ -207,6 +121,8 @@ form2linux service install service.json
             help='service help', dest='service')
         parserExampleService = subparsersService.add_parser(
             'example', help='shows an example configuration file. Can be used as template for a new service.')
+        parserExampleService.add_argument('-f', '--file', dest='file',
+                            help='the output is stored in that file')
         parserCheckService = subparsersService.add_parser(
             'check', help='checks the configuration file')
         parserCheckService.add_argument(
@@ -216,6 +132,50 @@ form2linux service install service.json
         parserInstallService.add_argument(
             'configuration', help='defines the properties of the service.', default='service.json')
 
+        parserSetup = subparsersMain.add_parser(
+            'setup', help='archive and restore, setup of a new system.')
+        subparsersSetup = parserSetup.add_subparsers(
+            help='setup help', dest='setup')
+        parserAdaptUsers = subparsersSetup.add_parser(
+            'adapt-users',  help='creates users and groups from safed versions of passwd and group')
+        parserAdaptUsers.add_argument(
+            'passwd', help='a saved version of /etc/passwd')
+        parserAdaptUsers.add_argument(
+            'group', help='a saved version of /etc/group')
+        parserAdaptUsers.add_argument(
+            'shadow', help='a saved version of /etc/shadow')
+
+        parserAddStandardUsers = subparsersSetup.add_parser(
+            'add-standard-users', help='creates users and groups from a Json form')
+        parserAddStandardUsers.add_argument(
+            'form', help='a safed version of /etc/passwd')
+
+        parserExampleAddStandardUsers = subparsersSetup.add_parser(
+            'example-add-standard-users', help='shows a form for the "add-standard-users" command')
+        parserExampleAddStandardUsers.add_argument(
+            '-f', '--file', dest='file', help='the output is stored there')
+
+        parserArchive = subparsersSetup.add_parser(
+            'archive',  help='stores files into a archive')
+        parserArchive.add_argument(
+            'form', help='the Json file with the archive definitions')
+        parserArchive.add_argument(
+            '-f', '--file', help='the list of the files will be stored there', default="*")
+
+        parserExampleArchive = subparsersSetup.add_parser(
+            'example-archive',  help='shows the form of the command "archive"')
+        parserExampleArchive.add_argument(
+            '-f', '--file', dest='file', help='the result is stored there')
+
+        parserPatchShadow = subparsersSetup.add_parser(
+            'patch-shadow',  help='puts an encoded password into the shadow password file')
+        parserPatchShadow.add_argument(
+            'user', help='the user of the entry to change')
+        parserPatchShadow.add_argument(
+            'passwd', help='the encoded password')
+        parserPatchShadow.add_argument(
+            '-f', '--file', dest='file', help='the shadow file', default='/etc/shadow')
+
         parserText = subparsersMain.add_parser(
             'text', help='Some text manipulation.')
         subparsersText = parserText.add_subparsers(
@@ -224,16 +184,21 @@ form2linux service install service.json
             'replace-range', help='replaces a section in text document with a string or a file.')
         parserReplaceRange.add_argument(
             'document', help='the document to change.')
-        parserReplaceRange.add_argument('-f', '--file', dest='file', help="the file contents is the replacement. Exclusive alternative: --replacement")
-        parserReplaceRange.add_argument('-r', '--replacement', dest='replacement', help="defines the replacement as string. Exclusive alternative: --file")
-        parserReplaceRange.add_argument('-s', '--start', dest='start', help="a regular expression starting the range to change.", default="```")
-        parserReplaceRange.add_argument('-e', '--end', dest='end', help="a regular expression ending the range to change.", default="```")
+        parserReplaceRange.add_argument(
+            '-f', '--file', dest='file', help="the file contents is the replacement. Exclusive alternative: --replacement")
+        parserReplaceRange.add_argument('-r', '--replacement', dest='replacement',
+                                        help="defines the replacement as string. Exclusive alternative: --file")
+        parserReplaceRange.add_argument(
+            '-s', '--start', dest='start', help="a regular expression starting the range to change.", default="```")
+        parserReplaceRange.add_argument(
+            '-e', '--end', dest='end', help="a regular expression ending the range to change.", default="```")
         parserReplaceRange.add_argument('-a', '--anchor', dest='anchor',
-                                      help="a regular expression defining the position of the text change. Than the next range is replaced by the program's output.", 
-                                      default=None)
+                                        help="a regular expression defining the position of the text change. Than the next range is replaced by the program's output.",
+                                        default=None)
         parserReplaceRange.add_argument('-m', '--min-length', dest='minLength', help="the replacement or replacement file must have at least that length",
                                         default=3)
-        parserReplaceRange.add_argument('-n', '--newline', action="store_true", dest='newline', help="add a newline at the --replacement string")
+        parserReplaceRange.add_argument('-n', '--newline', action="store_true",
+                                        dest='newline', help="add a newline at the --replacement string")
 
         # Process arguments
         args = parser.parse_args(argv[1:])
@@ -241,31 +206,49 @@ form2linux service install service.json
         verbose = args.verbose
         dry = args.dry
         if args.main == 'package':
+            builder = PackageBuilder(verbose, dry)
             if args.package == 'example':
-                examplePackage()
+                builder.example(args.file)
             elif args.package == 'check':
-                builder = PackageBuilder(verbose, dry)
                 builder.check(args.configuration)
             elif args.package == 'build':
-                builder = PackageBuilder(verbose, dry)
                 builder.build(args.configuration)
             else:
                 raise CLIError(f'unknown command: {args.package}')
         elif args.main == 'service':
+            builder = ServiceBuilder(verbose, dry)
             if args.service == 'example':
-                exampleService()
+                builder.example(args.file)
             elif args.service == 'check':
-                builder = ServiceBuilder(verbose, dry)
                 builder.check(args.configuration)
             elif args.service == 'install':
-                builder = ServiceBuilder(verbose, dry)
                 builder.install(args.configuration)
             else:
                 raise CLIError(f'unknown command: {args.package}')
+        elif args.main == 'setup':
+            builder = SetupBuilder(verbose, dry)
+            if args.setup == 'add-standard-users':
+                builder.addStandardUsers(args.form)
+            elif args.setup == 'adapt-users':
+                builder.adaptUsers(args.passwd, args.group, args.shadow)
+            elif args.setup == 'example-add-standard-users':
+                builder.exampleStandardUsers(args.file)
+            elif args.setup == 'example-archive':
+                builder.exampleArchive(args.file)
+            elif args.setup == 'example-archive':
+                builder.exampleArchive()
+            elif args.setup == 'archive':
+                builder.archive(args.form, args.file)
+            elif args.setup == 'patch-shadow':
+                builder.patchShadow(args.user, args.passwd, args.file)
+            elif args.setup == 'example-standard-users':
+                builder.exampleStandardUsers()
+            else:
+                raise CLIError(f'unknown command: {args.setup}')
         elif args.main == 'text':
             if args.text == 'replace-range':
                 builder = TextTool(verbose, dry)
-                builder.replaceRange(args.document, args.replacement, args.file, 
+                builder.replaceRange(args.document, args.replacement, args.file,
                                      args.anchor, args.start, args.end, args.minLength,
                                      args.newline)
             else:

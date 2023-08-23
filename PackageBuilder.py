@@ -13,9 +13,16 @@ import json
 import re
 import text.jsonutils as jsonutils
 from Builder import Builder, CLIError
+import base.StringUtils
 
 class PackageBuilder (Builder):
+    '''Manages the "package" commands.
+    '''
     def __init__(self, verbose: bool, dry: bool):
+        '''Constructor.
+        @param verbose: <em>True</em>: info messages will be displayed
+        @param dry: <em>True</em>: says what to do, but do not change data
+        '''
         Builder.__init__(self, verbose, dry)
         self._verbose = verbose
         self._package = None
@@ -35,6 +42,9 @@ class PackageBuilder (Builder):
         self._postRemove = None
 
     def build(self, configuration: str):
+        '''Builds the debian packages.
+        @param configuration: the Json file with the package definitions.
+        '''
         self.check(configuration)
         self._baseDirectory = f'{self._package}-{self._version}'
         self.buildDirectories()
@@ -46,6 +56,8 @@ class PackageBuilder (Builder):
         self.log(output.decode('utf-8'))
 
     def buildDirectories(self):
+        '''Handles the section "Directories".
+        '''
         if os.path.exists(self._baseDirectory):
             self.info(f'removing {self._baseDirectory}')
             shutil.rmtree(self._baseDirectory)
@@ -58,6 +70,8 @@ class PackageBuilder (Builder):
         self.handleDirectories()
 
     def buildControl(self):
+        '''Builds the file DEBIAN/control.
+        '''
         name = f'{self._baseDirectory}/DEBIAN/control'
         depends = ''
         for item in self._depends:
@@ -89,12 +103,16 @@ Description: {desc}''')
             self.info(f'written: {name}')
 
     def buildFiles(self):
+        '''Handles the section "Files".
+        '''
         self.handleFiles()
         self.findFiles(self._baseDirectory)
         self.info(f'installed size: {self._sizeFiles}')
         self.buildControl()
 
     def buildPostInstall(self):
+        '''Creates the script file DEBIAN/postinst.
+        '''
         sumLength = (0 if self._postInstall == '' else 1) + len(self._installedDirs) + len(self._links)
         if sumLength > 0:
             name = f'{self._baseDirectory}/DEBIAN/postinst'
@@ -134,6 +152,8 @@ if [ "$1" = configure ]; then
             os.chmod(name, 0o775)
 
     def buildPostRm(self):
+        '''Creates the script file DEBIAN/postrm.
+        '''
         sumLength = (0 if self._postRemove == '' else 1) + len(self._installedDirs) + len(self._links)
         if sumLength > 0:
             name = f'{self._baseDirectory}/DEBIAN/postrm'
@@ -165,10 +185,15 @@ PATH=/usr/bin:/bin:/usr/sbin:/sbin
             os.chmod(name, 0o775)
 
     def buildOtherFiles(self):
+        '''Creates the scripts.
+        '''
         self.buildPostInstall()
         self.buildPostRm()
 
     def check(self, configuration: str):
+        '''Checks the form and stores the data found there.
+        @param configuration: the Json form with the package definition
+        '''
         self.log(f'current directory: {os.getcwd()}')
         with open(configuration, 'r') as fp:
             data = fp.read()
@@ -223,7 +248,75 @@ PATH=/usr/bin:/bin:/usr/sbin:/sbin
             self.checkLinks()
             # self.checkLinks()
 
+    def example(self, filename: str):
+        '''Shows the example for the configuration file of "package".
+        @param filename: None or the file to store
+        '''
+        message = '''{
+  "Variables": {
+     "VERSION": "0.6.3",
+     "BASE": "usr/share/cppknife-%(VERSION)"
+  },
+  "Project": {
+    "Package": "cppknife",
+    "Version": "%(VERSION)",
+    "Architecture": "amd64",
+    "Maintainer": "SeaPlusPro <seapluspro@gmail.com>",
+    "Replaces": "",
+    "Depends": {
+      "libc6": ">= 2.36",
+      "libgdal-dev": ""
+      },
+    "Provides": "*",
+    "Suggests": [
+      "cppknife-db"
+      ],
+    "Homepage": "https://github.com/seapluspro/cppknife",
+    "Description": "Shared libraries for C++ programming and tools using that.",
+    "Notes": [
+      "The heart is the shared library libcppknife as a helper for fast programming a command line C++ program.",
+      "Also there are the programs textknife, fileknife, geoknife, sesknife, osknife which demonstrate the usage of the library."
+    ]
+  },
+  "Directories": [
+    "%(BASE)"
+    ],
+  "Files": {
+    "../build.release/libcppknife-%(VERSION).so": "%(BASE)/",
+    "../build.release/libcppknifegeo-%(VERSION).so": "%(BASE)/",
+    "../build.release/fileknife": "%(BASE)/",
+    "../build.release/textknife": "%(BASE)/",
+    "../build.release/sesknife": "%(BASE)/",
+    "../basic/*.hpp": "%(BASE)/basic/",
+    "../db/*.hpp": "%(BASE)/db/",
+    "../core/*.hpp": "%(BASE)/core/",
+    "../net/*.hpp": "%(BASE)/net/",
+    "../geo/*.hpp": "%(BASE)/geo/",
+    "../text/*.hpp": "%(BASE)/text/",
+    "../tools/*.hpp": "%(BASE)/tools/"
+  },
+  "Links": {
+    "%(BASE)/libcppknife-%(VERSION).so": "usr/lib/",
+    "%(BASE)/libcppknifegeo-%(VERSION).so": "usr/lib/",
+    "%(BASE)/fileknife": "usr/local/bin/",
+    "%(BASE)/textknife": "usr/local/bin/",
+    "%(BASE)/sesknife": "usr/local/bin/"
+  },
+  "PostInstall": "postinst2",
+  "PostRemove": ""
+}
+'''
+        if filename is None:
+            self.log(message)
+        else:
+            base.StringUtils.toFile(filename, message)
+
+
     def findFiles(self, base):
+        '''Builds the statistics: calculates the size of the installed files.
+        Note: this method is recursive.
+        @param base: the base directory
+        '''
         nodes = os.listdir(base)
         prefixLength = len(self._baseDirectory) + 1
         for node in nodes:

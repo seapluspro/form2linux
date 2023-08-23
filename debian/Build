@@ -13,6 +13,7 @@ function ChangeMd(){
     form2linux -v text replace-range ../doc/$file --file=$OUTPUT "--anchor=^###.The.Form"
   fi
 }
+sed -i "s/^.debian.form2linux-[0-9.]*/\/debian\/form2linux-$VERSION/" ../.gitignore
 if [ a = a ]; then
 form2linux -v text replace-range package.json --replacement=$VERSION --anchor=Variables '--start=VERSION":."' '--end="'
 ChangeMd package.md package
