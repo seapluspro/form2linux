@@ -17,86 +17,37 @@ import zipfile
 import tempfile
 import fnmatch
 
-import base.Const
-import base.StringUtils
-import base.LinuxUtils
-import base.ProcessHelper
-import base.TextProcessor
+from base import Const
+from base import StringUtils
+from base import LinuxUtils
+from base import ProcessHelper
+from base import MemoryLogger
+from text import TextProcessor
 
 REG_EXPR_WILDCARDS = re.compile(r'[*?\[\]]')
-GLOBAL_LOGGER = None
 GLOBAL_UNIT_TEST_MODE = None
 CURRDIR_PREFIX = '.' + os.sep
 
 
-class DirInfo:
-    '''Stores the directory info
-    '''
-
-    def __init__(self, maxYoungest=5, maxLargest=5, maxOldest=5, maxSmallest=5, minSize=1,
-                 dirsOnly=False, filesOnly=False, trace=0):
-        '''Constructor.
-        @param maxYoungest: the maximal number of entries in self._youngest
-        @param maxLargest: the maximal number of entries in self._largest
-        @param maxOldest: the maximal number of entries in self._oldest
-        @param maxLargest: the maximal number of entries in self._smallest
-        @param minSize: the minimum size of the entries in self._smallest
-        @param dirsOnly: True: only directories will be processed
-        @param filesOnly: True: only files (not dirs) will be processed
-        @param trace: if > 0: after processing this amount of nodes a statistic is logged
-        '''
-        self._fileCount = 0
-        self._fileSizes = 0
-        self._dirCount = 0
-        self._dirPattern = None
-        self._filePattern = None
-        self._ignoredDirs = 0
-        self._ignoredFiles = 0
-        self._youngest = []
-        self._largest = []
-        self._smallest = []
-        self._oldest = []
-        self._maxYoungest = maxYoungest
-        self._maxLargest = maxLargest
-        self._maxLargest = maxOldest
-        self._maxSmallest = maxSmallest
-        self._minSize = minSize
-        self._timeYoungest = 0
-        self._timeOldest = 0
-        self._sizeLargest = 0
-        self._dirsOnly = dirsOnly
-        self._filesOnly = filesOnly
-        self._trace = trace
-        self._nextTracePoint = trace
-        self._maxOldest = None
-        self._maxDepth = None
-
-
-def _error(message):
+def _error(message: str):
     '''Prints an error message.
     @param message: error message
     @return False: for chaining
     '''
-    global GLOBAL_LOGGER
-    if GLOBAL_LOGGER is None:
-        print('+++ ' + message)
-    else:
-        GLOBAL_LOGGER.error(message)
+    logger = MemoryLogger.MemoryLogger.globalLogger()
+    logger.error(message)
     return False
 
 
-def _log(message, level=base.Const.LEVEL_SUMMARY):
+def _log(message: str, level: int=Const.LEVEL_SUMMARY):
     '''Prints a message.
     @param message: error message
     '''
-    global GLOBAL_LOGGER
-    if GLOBAL_LOGGER is None:
-        print(message)
-    else:
-        GLOBAL_LOGGER.log(message, level)
+    logger = MemoryLogger.MemoryLogger.globalLogger()
+    logger.log(message, level)
 
 
-def changeExtendedAttributes(path, toAdd=None, toDelete=None):
+def changeExtendedAttributes(path: str, toAdd: str=None, toDelete: str=None):
     '''Changes the attributes of a file (using from /usr/bin/chattr).
     Important attributes: c(ompression) (no)C(OW) a(ppendOnly) (no)A(timeUpdates) (synchronous)D(irectoryUpdates)
     I(mmutable) (data)J(ournaling) S(ynchronousUpdates) u(ndeletable)
@@ -105,9 +56,10 @@ def changeExtendedAttributes(path, toAdd=None, toDelete=None):
     @param toDelete: None or a list of attributes to delete from the file, e.g. "cC"
     '''
     if toAdd is None and toDelete is None:
-        _error(f'changeExtendedAttributes(): missing attributes to add/delete for {path}')
+        _error(
+            f'changeExtendedAttributes(): missing attributes to add/delete for {path}')
     else:
-        helper = base.ProcessHelper.ProcessHelper(GLOBAL_LOGGER)
+        helper = ProcessHelper.ProcessHelper(MemoryLogger.MemoryLogger.globalLogger())
         argv = ['/usr/bin/chattr']
         if toAdd:
             argv.append(f'+{toAdd}')
@@ -117,24 +69,24 @@ def changeExtendedAttributes(path, toAdd=None, toDelete=None):
         helper.execute(argv, True)
 
 
-def clearDirectory(path):
+def clearDirectory(path: str):
     '''Deletes (recursivly) all files and subdirectories of a given path.
     Note: if the path is not a directory (or it does not exists) it will not be handled as an error
     @param path: the directory to clear
     '''
     if os.path.exists(path):
-        global GLOBAL_LOGGER
         for node in os.listdir(path):
             full = path + os.sep + node
             if os.path.isdir(full):
                 shutil.rmtree(full, True)
             else:
                 os.unlink(full)
-            if os.path.exists(full) and GLOBAL_LOGGER is not None:
+            if os.path.exists(full):
                 _error('cannot remove: ' + full)
 
 
-def createBackup(source, target=None, extension=None, expandPlaceholders=True, checkEqualNames=True):
+def createBackup(source: str, target: str=None, extension: str=None,
+                 expandPlaceholders: bool=True, checkEqualNames: bool=True):
     '''Save the source as target to save a file as backup.
     @param source: the file to backup
     @param target: the "safe place" of the file
@@ -163,7 +115,7 @@ def createBackup(source, target=None, extension=None, expandPlaceholders=True, c
             moveFile(source, target)
 
 
-def createFileTree(files, baseDirectory):
+def createFileTree(files: str, baseDirectory: str):
     '''Creates a directory tree with files specified in a text: each line contains one dir/file
     Specification: one file/dir per line (directories does not have a content)
     filename[|content[|mode[|date]]]
@@ -174,7 +126,7 @@ def createFileTree(files, baseDirectory):
     dir1/file1|this is in file|664|2020-01-22 02:44:32
     main.dir|->dir1
     @param files: the text describing the dirs/files
-    @parma baseDirectory: the tree begins with this directory
+    @param baseDirectory: the tree begins with this directory
     '''
     lines = files.split('\n')
     for line in lines:
@@ -203,14 +155,14 @@ def createFileTree(files, baseDirectory):
                     os.unlink(full)
                 os.symlink(content[2:], full)
             else:
-                base.StringUtils.toFile(full, content, fileMode=mode)
+                StringUtils.toFile(full, content, fileMode=mode)
                 if len(parts) > 3:
                     date = datetime.datetime.strptime(
                         parts[3], '%Y-%m-%d %H:%M:%S')
                     setModified(full, None, date)
 
 
-def copyDirectory(source, target, option=None, verboseLevel=0):
+def copyDirectory(source: str, target: str, option: str=None, verboseLevel: int=0):
     '''Copies all files (and dirs) from source to target directory.
     @param source: the base source directory
     @param target: the base target directoy()
@@ -219,7 +171,7 @@ def copyDirectory(source, target, option=None, verboseLevel=0):
         'update': only younger or not existing files will be copied False: all files will be copied
     '''
     if option == 'clear':
-        if verboseLevel >= base.Const.LEVEL_DETAIL:
+        if verboseLevel >= Const.LEVEL_DETAIL:
             _log('clearing ' + target, verboseLevel)
         clearDirectory(target)
     for node in os.listdir(source):
@@ -228,30 +180,30 @@ def copyDirectory(source, target, option=None, verboseLevel=0):
         if os.path.islink(src):
             if not option == 'update' or not os.path.exists(trg):
                 ref = os.readlink(src)
-                if verboseLevel >= base.Const.LEVEL_DETAIL:
-                    _log('symlink: {} [{}]'.format(trg, ref), verboseLevel)
+                if verboseLevel >= Const.LEVEL_DETAIL:
+                    _log(f'symlink: {trg} [{ref}]', verboseLevel)
                 try:
                     os.symlink(ref, trg)
                 except OSError as exc:
-                    _error('cannot create a symlink: {} -> {}'.format(ref, trg))
+                    _error(f'cannot create a symlink: {ref} -> {trg} [{exc}]')
         elif os.path.isdir(src):
             if option != 'update' or not os.path.exists(trg):
-                if verboseLevel >= base.Const.LEVEL_DETAIL:
-                    _log('directory: {} -> {}'.format(src, trg), verboseLevel)
+                if verboseLevel >= Const.LEVEL_DETAIL:
+                    _log(f'directory: {src} -> {trg}', verboseLevel)
                 shutil.copytree(src, trg, True)
             else:
                 copyDirectory(src, trg, option)
         else:
             if not os.path.exists(trg) or option == 'update' and os.path.getmtime(src) > os.path.getmtime(trg):
                 try:
-                    if verboseLevel >= base.Const.LEVEL_DETAIL:
-                        _log('{} -> {}'.format(src, trg), verboseLevel)
+                    if verboseLevel >= Const.LEVEL_DETAIL:
+                        _log(f'{src} -> {trg}', verboseLevel)
                     shutil.copy2(src, trg)
                 except OSError as exc:
-                    _error('cannot copy {}: {}'.format(trg, str(exc)))
+                    _error(f'cannot copy {trg}: {exc}')
 
 
-def copyByRules(rules, baseSource, baseTarget):
+def copyByRules(rules, baseSource: str, baseTarget: str):
     '''Copies directories/files from a given directory tree controlled by a list of rules.
     The rules is a list of lines.
     Each line contains a copy rule: a source file/file pattern followed by a target name and options.
@@ -286,7 +238,7 @@ def copyByRules(rules, baseSource, baseTarget):
             if rule.startswith(':'):
                 target = rule[1:]
                 full = baseTarget + os.sep + target
-                _log('create ' + full, base.Const.LEVEL_DETAIL)
+                _log('create ' + full, Const.LEVEL_DETAIL)
                 os.makedirs(full)
                 continue
             parts = rule.split(':')
@@ -295,7 +247,7 @@ def copyByRules(rules, baseSource, baseTarget):
             full = baseSource + os.sep + source.lstrip(os.sep)
             toTest = os.path.dirname(full) if hasWildcards(source) else full
             if toTest != '' and not os.path.exists(toTest):
-                _error('line {}: source not found: {}'.format(lineNo, toTest))
+                _error(f'line {lineNo}: source not found: {toTest}')
                 continue
             if len(parts) == 1:
                 target = source
@@ -315,13 +267,13 @@ def copyByRules(rules, baseSource, baseTarget):
                             _error('wrong syntax in replace option: ' + value)
                             del opts['replace']
             else:
-                _error('line {}: too many ":" in: {}'.format(lineNo, rule))
+                _error(f'line {lineNo}: too many ":" in: {rule}')
                 continue
             copyByRule(full, baseTarget + os.sep +
                        target, opts, source.count(os.sep))
 
 
-def copyByRule(fnSource, fnTarget, options, depthRelPath):
+def copyByRule(fnSource: str, fnTarget: str, options: str, depthRelPath: int):
     '''Execute a rule from copyFileTree.
     @param fnSource: the source file/directory
     @param fnTarget: the target
@@ -341,19 +293,17 @@ def copyByRule(fnSource, fnTarget, options, depthRelPath):
         for node in os.listdir('.' if parentSource == '' else parentSource):
             full = pathSource + node
             if not fnmatch.fnmatch(node, nodeSource):
-                _log('ignoring {}'.format(full), base.Const.LEVEL_DETAIL)
+                _log(f'ignoring {full}', Const.LEVEL_DETAIL)
                 continue
             if reExcept is not None and reExcept.match(node) is not None:
-                _log('ignoring {}'.format(full), base.Const.LEVEL_DETAIL)
+                _log(f'ignoring {full}', Const.LEVEL_DETAIL)
                 continue
             isDir = os.path.isdir(full)
             if 'dirsonly' in options and not isDir:
-                _log('ignoring non directory {}'.format(
-                    full), base.Const.LEVEL_DETAIL)
+                _log(f'ignoring non directory {full}', Const.LEVEL_DETAIL)
                 continue
             if 'filesonly' in options and isDir:
-                _log('ignoring directory {}'.format(
-                    full), base.Const.LEVEL_DETAIL)
+                _log(f'ignoring directory {full}', Const.LEVEL_DETAIL)
                 continue
             copyByRule(pathSource + node, pathTarget +
                        node, options, depthRelPath)
@@ -368,22 +318,19 @@ def copyByRule(fnSource, fnTarget, options, depthRelPath):
             os.symlink(linkSource, fnTarget)
         else:
             if 'dirsonly' in options and not os.path.isdir(fnSource):
-                _log('ignoring non directory {}'.format(
-                    fnSource), base.Const.LEVEL_DETAIL)
+                _log(f'ignoring non directory {fnSource}', Const.LEVEL_DETAIL)
             elif 'filesonly' in options and os.path.isdir(fnSource):
-                _log('ignoring directory {}'.format(
-                    fnSource), base.Const.LEVEL_DETAIL)
+                _log(f'ignoring directory {fnSource}', Const.LEVEL_DETAIL)
             else:
                 if os.path.isdir(fnSource):
                     if 'recursive' in options:
                         shutil.copytree(fnSource, fnTarget)
                     else:
-                        _log('creating ' + fnTarget, base.Const.LEVEL_DETAIL)
+                        _log('creating ' + fnTarget, Const.LEVEL_DETAIL)
                         os.makedirs(fnTarget)
                         shutil.copystat(fnSource, fnTarget)
                 elif 'replace' in options:
-                    global GLOBAL_LOGGER
-                    processor = base.TextProcessor.TextProcessor(GLOBAL_LOGGER)
+                    processor = TextProcessor.TextProcessor(MemoryLogger.MemoryLogger.globalLogger())
                     processor.readFile(fnSource, mustExists=True)
                     value = options['replace']
                     if value == '' or value.count(value[0]) != 3:
@@ -392,28 +339,27 @@ def copyByRule(fnSource, fnTarget, options, depthRelPath):
                         parts = value[1:].split(value[0], 2)
                         hits = processor.replace(
                             parts[0], parts[1], noRegExpr=True, countHits=True)
-                        _log('{} replacement(s) [{}] in {} => {}'.format(hits, value, fnSource,
-                                                                         fnTarget), base.Const.LEVEL_DETAIL)
+                        _log(f'{hits} replacement(s) [{value}] in {fnSource} => {fnTarget}',
+                             Const.LEVEL_DETAIL)
                         processor.writeFile(fnTarget)
                 else:
-                    _log('copying {} => {}'.format(
-                        fnSource, fnTarget), base.Const.LEVEL_DETAIL)
+                    _log(f'copying {fnSource} => {fnTarget}',
+                         Const.LEVEL_DETAIL)
                     shutil.copy2(fnSource, fnTarget, follow_symlinks=False)
 
 
-def copyIfExists(source, target):
+def copyIfExists(source: str, target: str):
     '''Copies all files (and dirs) from source to target directory.
     @param source: the base source directory
     @param target: the base target directoy()
     @param verboseLevel: True: do logging
     '''
     if os.path.exists(source):
-        _log('copying {} => {} ...'.format(
-            source, target), 2, base.Const.LEVEL_DETAIL)
+        _log(f'copying {source} => {target} ...', Const.LEVEL_DETAIL)
         shutil.copy2(source, target)
 
 
-def deepRename(oldName, newNode, deleteExisting=False):
+def deepRename(oldName: str, newNode: str, deleteExisting: bool=False) -> bool:
     '''Renames a file or symbolic link.
     Not symbolic links: renaming "normally".
     Symbolic links: the link target will be renamed. This is useful for backing up files:
@@ -429,8 +375,8 @@ def deepRename(oldName, newNode, deleteExisting=False):
         source = endOfLinkChain(oldName)
         nodeOld = os.path.basename(source)
         if nodeOld == newNode:
-            rc = _error('cannot rename (link target has the same name {}): {}'.format(
-                nodeOld, oldName))
+            rc = _error(
+                f'cannot rename (link target has the same name {nodeOld}): {oldName}')
         else:
             rc = deepRename(source, newNode)
     else:
@@ -439,24 +385,22 @@ def deepRename(oldName, newNode, deleteExisting=False):
             if not deleteExisting:
                 rc = _error('cannot rename (new name exists): ' + newName)
             else:
-                _log('deleting ' + newName, base.Const.LEVEL_LOOP)
-                global GLOBAL_UNIT_TEST_MODE
+                _log('deleting ' + newName, Const.LEVEL_LOOP)
                 if GLOBAL_UNIT_TEST_MODE == 'deepRename-no-unlink':
-                    _log('suppressing delete of {} ({})'.format(
-                        newName, GLOBAL_UNIT_TEST_MODE), base.Const.LEVEL_DETAIL)
+                    _log(f'suppressing delete of {newName} ({GLOBAL_UNIT_TEST_MODE})',
+                         Const.LEVEL_DETAIL)
                 else:
                     os.unlink(newName)
                 rc = not os.path.exists(newName)
                 if not rc:
-                    _error('cannot remove new name: ' + newName)
+                    _error(f'cannot remove new name: {newName}')
         if rc:
-            _log('renaming {} => {}'.format(
-                oldName, newName), base.Const.LEVEL_LOOP)
+            _log(f'renaming {oldName} => {newName}', Const.LEVEL_LOOP)
             os.rename(oldName, newName)
     return rc
 
 
-def distinctPaths(path1, path2):
+def distinctPaths(path1: str, path2: str) -> bool:
     '''Tests whether two paths are not part of each other.
     @param path1: first path to test
     @param path2: 2nd path to test
@@ -467,19 +411,19 @@ def distinctPaths(path1, path2):
     return not dir1.startswith(dir2) and not dir2.startswith(dir1)
 
 
-def endOfLinkChain(filename):
+def endOfLinkChain(filename: str) -> str:
     '''Returns the last entry of a symbolic link chain or None.
     @param filename: the first entry of a symbol link chain
     @return: None: not existing nodes in the link chain Otherwise: the last element of the chain
     '''
     rc = os.path.realpath(filename)
     if not os.path.lexists(rc) or os.path.islink(rc):
-        _error('invalid entry {} in the symbolic link chain: {}'.format(rc, filename))
+        _error(f'invalid entry {rc} in the symbolic link chain: {filename}')
         rc = None
     return rc
 
 
-def ensureDirectory(directory, mode=0o777, user=None, group=None):
+def ensureDirectory(directory: str, mode: int=0o777, user: str=None, group: str=None) -> str:
     '''Ensures that the given directory exists.
     @param directory: the complete name
     @return: None: could not create the directory
@@ -491,22 +435,21 @@ def ensureDirectory(directory, mode=0o777, user=None, group=None):
             os.unlink(directory)
         except FileNotFoundError:
             pass
-        _log('creating {}{} ...'.format(
-            directory, os.sep), base.Const.LEVEL_SUMMARY)
+        _log(f'creating {directory}{os.sep} ...', Const.LEVEL_SUMMARY)
         try:
             os.makedirs(directory, mode)
             os.chmod(directory, mode)
         except OSError as exc:
-            _error('cannot create dir {}: {}'.format(directory, str(exc)))
+            _error(f'cannot create dir {directory}: {exc}')
         if not os.path.isdir(directory):
             directory = None
         elif user is not None or group is not None:
-            os.chown(directory, base.LinuxUtils.userId(
-                user), base.LinuxUtils.groupId(group))
+            os.chown(directory, LinuxUtils.userId(
+                user), LinuxUtils.groupId(group))
     return directory
 
 
-def ensureFileDoesNotExist(filename):
+def ensureFileDoesNotExist(filename: str):
     '''Ensures that a file does not exist.
     @param filename: the file to delete if it exists.
     '''
@@ -514,20 +457,19 @@ def ensureFileDoesNotExist(filename):
         try:
             try:
                 if os.path.isdir(filename):
-                    _log('removing {}{} ...'.format(
-                        filename, os.sep), base.Const.LEVEL_DETAIL)
+                    _log(f'removing {filename}{os.sep} ...',
+                         Const.LEVEL_DETAIL)
                     shutil.rmtree(filename, False)
                 else:
-                    _log('removing {} ...'.format(
-                        filename), base.Const.LEVEL_DETAIL)
+                    _log(f'removing {filename} ...', Const.LEVEL_DETAIL)
                     os.unlink(filename)
-            except OSError as exp:
-                _error('cannot delete {:s}: {:s}'.format(filename, str(exp)))
+            except OSError as exc:
+                _error(f'cannot delete {filename}: {exc}')
         except FileNotFoundError:
             pass
 
 
-def ensureFileExists(filename, content=''):
+def ensureFileExists(filename: str, content: str=''):
     '''Ensures that a file does not exist.
     @param filename: the file to create if it does not exist
     @param content: this text will be stored for a new created file
@@ -535,16 +477,15 @@ def ensureFileExists(filename, content=''):
     try:
         if os.path.exists(filename):
             if os.path.isdir(filename):
-                _log('is a directory: {}'.format(
-                    filename), base.Const.LEVEL_DETAIL)
+                _log(f'is a directory: {filename}', Const.LEVEL_DETAIL)
         else:
-            _log('creating {} ...'.format(filename), base.Const.LEVEL_DETAIL)
-            base.StringUtils.toFile(filename, content)
+            _log(f'creating {filename} ...', Const.LEVEL_DETAIL)
+            StringUtils.toFile(filename, content)
     except OSError as exc:
-        _error('problems with {}: {}'.format(filename, str(exc)))
+        _error(f'problems with {filename}: {exc}')
 
 
-def ensureSymbolicLink(source, target, createTarget=True):
+def ensureSymbolicLink(source: str, target: str, createTarget: bool=True):
     '''Ensures that a directory exists.
     @param source: the full name of the link source, e.g. '../sibling'
     @param target: full name of the file of type 'link'
@@ -560,14 +501,13 @@ def ensureSymbolicLink(source, target, createTarget=True):
         if os.path.islink(target):
             oldLink = os.readlink(target)
             if oldLink != source:
-                _log('changing link from {} to {}'.format(
-                    oldLink, source), base.Const.LEVEL_DETAIL)
+                _log(
+                    f'changing link from {oldLink} to {source}', Const.LEVEL_DETAIL)
                 os.unlink(target)
         elif os.path.isdir(target):
-            _error('target {} is already a directory (not a link)'.format(target))
+            _error(f'target {target} is already a directory (not a link)')
         else:
-            _log('removing the non link file ' +
-                 target, base.Const.LEVEL_DETAIL)
+            _log(f'removing the non link file {target}', Const.LEVEL_DETAIL)
             os.unlink(target)
     if not os.path.exists(target):
         baseDir = os.path.dirname(target)
@@ -579,25 +519,26 @@ def ensureSymbolicLink(source, target, createTarget=True):
         realPath = os.path.join(target, source)
         absSource = os.path.normpath(realPath)
         if not os.path.exists(absSource):
-            _error('missing source {} [= {}]'.format(source, absSource))
+            _error(f'missing source {source} [= {absSource}]')
         elif hasParent:
-            _log('creating symbol link {} -> {}'.format(source, target),
-                 base.Const.LEVEL_DETAIL)
+            _log(f'creating symbol link {source} -> {target}',
+                 Const.LEVEL_DETAIL)
             os.symlink(source, target)
     rc = os.path.islink(target) and os.readlink(target) == source
     return rc
 
 
-def extendedAttributesOf(path):
+def extendedAttributesOf(path: str) -> str:
     '''Returns the attributes of a file (returned from /usr/bin/lsattr).
     Important attributes: c(ompression) (no)C(OW) a(ppendOnly) (no)A(timeUpdates) (synchronous)D(irectoryUpdates)
     I(mmutable) (data)J(ournaling) S(ynchronousUpdates) u(ndeletable)
     @param path: the file to inspect
     @return: a list of attributes, e.g. 'cC' or ''
     '''
-    helper = base.ProcessHelper.ProcessHelper(GLOBAL_LOGGER)
+    helper = ProcessHelper.ProcessHelper(MemoryLogger.MemoryLogger.globalLogger())
     helper.execute(['/usr/bin/lsattr', path], False, storeOutput=True)
-    rc = ('' if not helper._output else helper._output[0]).split(' ')[0].replace('-', '')
+    rc = ('' if not helper.output() else helper.output()[0]).split(
+        ' ')[0].replace('-', '')
     return rc
 
 
@@ -625,7 +566,8 @@ def expandFiles(path: str, pattern: str, dirsOnly: bool=False, filesOnly: bool=T
         _error(f'cannot enter directory {path}: {exc}')
     return rc
 
-def expandPathPlaceholders(pattern, filename):
+
+def expandPathPlaceholders(pattern: str, filename: str):
     '''Expands placeholders in a pattern with the current date time or parts of a related filename.
     @param pattern: a string with placeholders:
         %date%: the current date %datetime%: the current date and time
@@ -666,7 +608,9 @@ def expandWildcards(path: str, nodesList: str, names):
     '''
     unprocessed = [path]
     processed = []
-    def dirName(x): return x if not x.endswith('/') else x[0:-1]
+
+    def dirName(x):
+        return x if not x.endswith('/') else x[0:-1]
     while len(unprocessed) > 0:
         item = dirName(unprocessed[0])
         unprocessed = unprocessed[1:]
@@ -675,13 +619,15 @@ def expandWildcards(path: str, nodesList: str, names):
                 processed.append(item)
         else:
             items = item.split('/')
-            for ix in range(len(items)):
-                part = items[ix]
+            ix = -1
+            for part in items:
+                ix += 1
                 if hasWildcards(part):
                     prefix = '' if ix == 0 else '/'.join(items[0:ix])
                     if os.path.isdir(prefix):
                         nodes = expandFiles(prefix, part, True, False)
-                        suffix = '' if ix >= len(items) - 1 else '/'.join(items[ix+1:])
+                        suffix = '' if ix >= len(
+                            items) - 1 else '/'.join(items[ix+1:])
                         for node in nodes:
                             unprocessed.append(f'{prefix}/{node}/{suffix}')
                         # Handle only the first wildcard:
@@ -701,34 +647,35 @@ def expandWildcards(path: str, nodesList: str, names):
                     if os.path.exists(full):
                         names.append(full)
 
-def fileClass(path):
+
+def fileClass(path: str):
     '''Returns the file class of the file.
     @param path: the full filename
     @return: a tuple (class, subclass): class: 'container', 'text', 'binary', 'unknown'
             subclass of 'container': 'dir', 'tar', 'tgz', 'zip'
             subclass of 'text': 'xml', 'shell'
     '''
-    def isBinaryByte(bb):
-        rc = bb < 0x09 or (0x0d < bb < 0x20)
+    def isBinaryByte(theByte):
+        rc = theByte < 0x09 or (0x0d < theByte < 0x20)
         return rc
 
     def isBinary(byteArray):
         found = 0
         rc = False
         # for ix in range(len(byteArray)):
-        #    bb = byteArray[ix]
-        for bb in byteArray:
-            if bb == b'\x00':
+        #    theByte = byteArray[ix]
+        for theByte in byteArray:
+            if theByte == b'\x00':
                 rc = True
                 break
-            elif isBinaryByte(bb):
+            if isBinaryByte(theByte):
                 found += 1
                 if found > 100 or found > len(byteArray) / 10:
                     rc = True
                     break
         return rc
 
-    def isNullString(byteArray):
+    def isNullString(byteArray) -> bool:
         '''Tests whether the byteArray is a text delimited with 0.
         @param byteArray: array to test
         @return True: only text and '\0' is part of byteArray
@@ -745,7 +692,7 @@ def fileClass(path):
             ix += 1
         return rc and hasNull
 
-    def isNullNumber(byteArray):
+    def isNullNumber(byteArray) -> bool:
         '''Tests whether the byteArray are digits delimited with 0.
         @param byteArray: array to test
         @return True: only decimal digits and '\0' is part of byteArray
@@ -785,7 +732,16 @@ def fileClass(path):
     return (theClass, subClass)
 
 
-def fileType(path):
+def fileContains(string: str, filename: str) -> bool:
+    rc = False
+    with open(filename, 'r', encoding='utf-8') as fp:
+        for line in fp:
+            if line.find(string) >= 0:
+                rc = True
+                break
+    return rc
+    
+def fileType(path: str) -> str:
     '''Returns the file type: 'file', 'dir', 'link', 'block'
     @param path: the full filename
     @return: the filetype: 'file', 'dir', 'link', 'block', 'char'
@@ -799,7 +755,7 @@ def fileType(path):
     return rc
 
 
-def fromBytes(line):
+def fromBytes(line) -> str:
     '''Converts a line with type bytes into type str.
     @param line: line to convert
     '''
@@ -813,12 +769,11 @@ def fromBytes(line):
     return rc
 
 
-def hasWildcards(filename):
+def hasWildcards(filename: str) -> bool:
     '''Tests whether a filename has wildcards.
     @param filename: filename to test
     @return: True: the filename contains wildcard like '*', '?' or '[...]'
     '''
-    global REG_EXPR_WILDCARDS
     rc = REG_EXPR_WILDCARDS.search(filename) is not None
     return rc
 
@@ -833,7 +788,7 @@ def joinFilename(parts):
     return rc
 
 
-def joinRelativePath(relPath, start=None):
+def joinRelativePath(relPath: str, start: str=None):
     '''Joins a relative path and a start path to a non relative path.
     Example: joinPath('../brother', '/parent/sister') is '/parent/brother'
     @param relPath: the relative path, e.g. '../sister'
@@ -851,8 +806,8 @@ def joinRelativePath(relPath, start=None):
         rc = ''
         while relParts and relParts[0] == '..':
             if not startParts:
-                _error('too many backsteps in relpath {} for start {}'.format(
-                    relPath, start))
+                _error(
+                    f'too many backsteps in relpath {relPath} for start {start}')
                 rc = None
                 break
             relParts = relParts[1:]
@@ -867,7 +822,7 @@ def joinRelativePath(relPath, start=None):
     return rc
 
 
-def listFile(statInfo, full, orderDateSize=True, humanReadable=True):
+def listFile(statInfo, full: str, orderDateSize: bool=True, humanReadable: bool=True) -> str:
     '''Builds the info for one file (or directory)
     @param statInfo: the info returned by os.(l)stat()
     @param full: the filename
@@ -882,26 +837,26 @@ def listFile(statInfo, full, orderDateSize=True, humanReadable=True):
         size = '<link>'
         full += ' -> ' + os.readlink(full)
     elif humanReadable:
-        size = "{:>8s}".format(base.StringUtils.formatSize(statInfo.st_size))
+        size = f'{StringUtils.formatSize(statInfo.st_size):-8}'
     else:
-        size = '{:13.6f} MB'.format(statInfo.st_size / 1000000)
+        size = f'{statInfo.st_size / 1000000:13.6f} MB'
     fdate = datetime.datetime.fromtimestamp(statInfo.st_mtime)
     dateString = fdate.strftime("%Y.%m.%d %H:%M:%S")
     if orderDateSize:
-        rc = '{:s} {:>12s} {:s}'.format(dateString, size, full)
+        rc = f'{dateString} {size:-12} {full}'
     else:
-        rc = '{:>12s} {:s} {:s}'.format(size, dateString, full)
+        rc = f'{size:-12} {dateString} {full}'
     return rc
 
 
-def mountPointOf(path, mountFile='/proc/mounts'):
+def mountPointOf(path: str, mountFile: str='/proc/mounts'):
     '''Returns the mount point of the filesystem of a given directory.
     @param path: the path to inspect
     @return: (<mount-point>, <fstype>) the mount point of the filesystem containing the path and the filesystem name
     '''
     rc = None
     fsType = None
-    with open(mountFile, 'r') as fp:
+    with open(mountFile, 'r', encoding='utf-8') as fp:
         for line in fp:
             parts = line.split(' ')
             if len(parts) > 3 and path.startswith(parts[1]) and (rc is None or len(rc) < len(parts[1])):
@@ -910,7 +865,7 @@ def mountPointOf(path, mountFile='/proc/mounts'):
     return (rc, fsType)
 
 
-def moveFile(source, target, removeAlways=True, createBaseDir=True):
+def moveFile(source: str, target: str, removeAlways: bool=True, createBaseDir: bool=True):
     '''Moves a file from one location to another.
     If both parent directories are in the same filesytem rename is used.
     Otherwise a copy is done and a deletion of the source.
@@ -936,7 +891,7 @@ def moveFile(source, target, removeAlways=True, createBaseDir=True):
             _error(f'cannot copy {source} to {target}: {exc}')
 
 
-def pathToNode(path):
+def pathToNode(path: str) -> str:
     '''Changed a path into a name which can be used as node (of a filename).
     @param path: the path to convert
     @return: path with replaced path separators
@@ -945,7 +900,7 @@ def pathToNode(path):
     return rc
 
 
-def replaceExtension(filename, extension):
+def replaceExtension(filename: str, extension: str) -> str:
     '''Replaces the extension of a filename.
     @param filename: the filename to process
     @param extension: the new extension
@@ -959,14 +914,15 @@ def replaceExtension(filename, extension):
         rc = filename + extension
     return rc
 
-def splitFilename(full):
+
+def splitFilename(full: str):
     '''Splits a filename into its parts.
     This is the other part of joinFilename().
     @param full: the filename with path
     @return: a dictionary with the keys 'full', 'path', 'node', 'fn', 'ext'
         example: { 'full': '/home/jonny.txt', 'path': '/home/', 'node' : 'jonny.txt', 'fn': 'jonny' , 'ext': '.txt' }
     '''
-    rc = dict()
+    rc = {}
     rc['full'] = full
     ix = full.rfind(os.sep)
     if ix < 0:
@@ -985,14 +941,6 @@ def splitFilename(full):
     return rc
 
 
-def setLogger(logger):
-    '''Sets the global logger.
-    @param logger: the global logger
-    '''
-    global GLOBAL_LOGGER
-    GLOBAL_LOGGER = logger
-
-
 def setUnitTestMode(mode):
     '''Sets special behaviour for unit tests.
     '''
@@ -1000,7 +948,7 @@ def setUnitTestMode(mode):
     GLOBAL_UNIT_TEST_MODE = mode
 
 
-def setModified(path, timeUnix, date=None):
+def setModified(path: str, timeUnix, date: datetime.datetime=None):
     '''Sets the file modification time.
     @precondition: exactly one of date and timeUnix must be None and the other not None
     @param path: the full path of the file to modify
@@ -1024,7 +972,7 @@ def setModified(path, timeUnix, date=None):
     return rc
 
 
-def tail(filename, maxLines=1, withLineNumbers=False):
+def tail(filename: str, maxLines: int=1, withLineNumbers: bool=False):
     '''Returns the tail of a given file.
     @param filename: the file to inspect
     @param maxLines: the number of lines to return (or less)
@@ -1032,9 +980,8 @@ def tail(filename, maxLines=1, withLineNumbers=False):
     @return: a list of lines from the end of the file
     '''
     lines = []
-    if maxLines < 1:
-        maxLines = 1
-    with open(filename, "r") as fp:
+    maxLines = max(1, maxLines)
+    with open(filename, "r", encoding='utf-8') as fp:
         lineNo = 0
         for line in fp:
             lineNo += 1
@@ -1044,12 +991,25 @@ def tail(filename, maxLines=1, withLineNumbers=False):
         if withLineNumbers:
             lineNo -= len(lines) - 1
             for ix, line in enumerate(lines):
-                lines[ix] = '{}: {}'.format(lineNo, line)
+                lines[ix] = f'{lineNo}: {line}'
                 lineNo += 1
     return lines
 
 
-def tempFile(node, subDir=None):
+def tempDirectory(node: str, subDir: str=None) -> str:
+    '''Returns the name of a directory laying in the temporary directory.
+    @param node: the filename without path
+    @param subdir: None or a subdirectory in the temp directory (may be created)
+    '''
+    path = tempfile.gettempdir() + os.sep
+    if subDir is not None:
+        path += subDir + os.sep
+    path += node
+    if not os.path.exists(path):
+        os.makedirs(path, 0o777, True)
+    return path
+
+def tempFile(node: str, subDir: str=None, subDir2: str=None) -> str:
     '''Returns the name of a file laying in the temporary directory.
     @param node: the filename without path
     @param subdir: None or a subdirectory in the temp directory (may be created)
@@ -1057,13 +1017,16 @@ def tempFile(node, subDir=None):
     path = tempfile.gettempdir() + os.sep
     if subDir is not None:
         path += subDir
-        os.makedirs(path, 0o777, True)
+        if subDir2 is not None:
+            path += os.sep + subDir2
+        if not os.path.exists(path):
+            os.makedirs(path, 0o777, True)
         path += os.sep
     path += node
     return path
 
 
-def unpack(archive, target, clear=False):
+def unpack(archive: str, target: str, clear: bool=False):
     '''Copies the content of an archive (tar, zip...) into a given directory.
     @param archive: name of the archive, the extension defines the type: '.tgz': tar '.zip': zip
     @param target: the directory which will be filled by the archive content. Will be created if needed
@@ -1078,25 +1041,14 @@ def unpack(archive, target, clear=False):
     if archive is None:
         pass
     elif archive.endswith('.tgz'):
-        tar = tarfile.open(archive, 'r:gz')
-        tar.extractall(target)
+        with tarfile.open(archive, 'r:gz') as tar:
+            tar.extractall(target)
     elif archive.endswith('.zip'):
-        zipFile = zipfile.ZipFile(archive, 'r')
-        zipFile.extractall(target)
+        with zipfile.ZipFile(archive, 'r') as zipFile:
+            zipFile.extractall(target)
     else:
         _error('unknown file extend: ' + archive)
 
 
-def main():
-    '''The main function.
-    '''
-    info1 = directoryInfo('/etc')
-    print('{}: file(s): {} / {:.3f} MB dir(s): {} ignored (files/dirs): {} / {}'.format(
-        '/etc', info1._fileCount, info1._fileSizes / 1024 / 1024.0,
-        info1._dirCount, info1._ignoredFiles, info1._ignoredDirs))
-    lines1 = tail('/etc/fstab', 5, True)
-    print('{}:\n{}'.format('/etc/fstab', ''.join(lines1)))
-
-
 if __name__ == '__main__':
-    main()
+    pass

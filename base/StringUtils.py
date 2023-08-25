@@ -9,10 +9,14 @@ import re
 import os
 import datetime
 import codecs
+from typing import Sequence
 
-import base.FileHelper
-
-LOGGER = None
+from base import Const
+from base import FileHelper
+from base import LinuxUtils
+from base import Logger
+from base import MemoryLogger
+from base import StringUtils
 
 # .................................1.....1....2.....2....3.....3
 REG_EXPR_DATE = re.compile(r'^(\d{4})[.-](\d\d?)[.-](\d\d?)')
@@ -21,12 +25,12 @@ REG_EXPR_DATE2 = re.compile(r'^(\d\d?)[.](\d\d?)[.](\d{4})')
 REG_EXPR_TIME = re.compile(r'^(\d\d?):(\d\d?)(?::(\d\d?))?$')
 REG_EXPR_INT = re.compile(r'^0[xX]([0-9a-fA-F]+)|0o([0-7]+)|(\d+)$')
 REG_EXPR_SIZE = re.compile(
-    r'^(\d+)((?:[kmgt]i?)?(?:b(?:ytes?)?)?)?$', base.Const.IGNORE_CASE)
+    r'^(\d+)((?:[kmgt]i?)?(?:b(?:ytes?)?)?)?$', Const.IGNORE_CASE)
 # REG_EXPR_ESC =
 # re.compile(r'(\\U........|\\u....|\\x..|\\[0-7]{1,3}|\\N\{[^}]+\}|\\[\\'"abfnrtv])',
-# base.Const.RE_UNICODE)
+# Const.RE_UNICODE)
 REG_EXPR_ESC = re.compile(r'''(\\U[0-9a-fA-F]{8}|\\u[0-9a-fA-F]{4}|\\x[0-9a-fA-F][0-9a-fA-F]|\\[0-7]{1,3}'
-    + '|\\N\{[^}]+\}|\\[\\'"abfnrtv])''', base.Const.RE_UNICODE)
+    + '|\\N\{[^}]+\}|\\[\\'"abfnrtv])''', Const.RE_UNICODE)
 #    ( \\U........      # 8-digit hex escapes
 #    | \\u....          # 4-digit hex escapes
 #    | \\x..            # 2-digit hex escapes
@@ -34,16 +38,14 @@ REG_EXPR_ESC = re.compile(r'''(\\U[0-9a-fA-F]{8}|\\u[0-9a-fA-F]{4}|\\x[0-9a-fA-F
 #    | \\N\{[^}]+\}     # Unicode characters by name
 #    | \\[\\'"abfnrtv]  # Single-character escapes
 
-def _error(msg, logger=None):
-    global LOGGER
-    if logger is None:
-        logger = LOGGER
-    if logger is None:
-        print(f'+++ {msg}')
-    else:
-        logger.error(msg)
 
-def arrayContains(lines, regExpr):
+def _error(msg: str, logger: Logger.Logger=None):
+    if logger is None:
+        logger = MemoryLogger.MemoryLogger.globalLogger()
+    logger.error(msg)
+
+
+def arrayContains(lines: Sequence[str], regExpr):
     '''Tests whether at least one line of the array lines contains a given regular expression.
     @param lines: array of text lines
     @param regExpr: a string or a regexpr object
@@ -59,7 +61,7 @@ def arrayContains(lines, regExpr):
     return found
 
 
-def asFloat(value, defaultValue=None):
+def asFloat(value: str, defaultValue: float=None) -> float:
     '''Tests whether a value is an floating point number. If not the defaultValue is returned. Otherwise the float is returned.
     @param value: string value to test
     @param defaultValue: the return value if value is not an float
@@ -76,7 +78,7 @@ def asFloat(value, defaultValue=None):
     return rc
 
 
-def asInt(value, defaultValue=None, signIsAllowed=True):
+def asInt(value, defaultValue: int=None, signIsAllowed: bool=True) -> int:
     '''Tests whether a value is an integer. If not the defaultValue is returned. Otherwise the integer is returned.
     @param value: string value to test
     @param defaultValue: the return value if value is not an integer
@@ -101,18 +103,19 @@ def asInt(value, defaultValue=None, signIsAllowed=True):
                     rc = int(value, 8)
                 else:
                     rc = int(value)
+                # pylint: disable-next=invalid-unary-operand-type
                 rc = -rc if negative else rc
     return rc
 
-
+# pylint: disable-next=unused-argument
 def avoidWarning(unusedVariable):
     '''This function is used to avoid the warning "variable not used".
     @param unusedVariable: variable to "hide"
     '''
-    # do nothing
+    # Nothing to do
 
 
-def escChars(text):
+def escChars(text: str):
     '''Return the text with escaped meta characters like \n, \t, \\.
     Inversion: @see unescChars()
     @todo: handle more cases, performance optimization
@@ -124,7 +127,8 @@ def escChars(text):
     return rc
 
 
-def fileToText(filename, sep=None, binaryTestLength=4096, ignoreBinary=False, maxLength=10*1000*1000):
+def fileToText(filename: str, sep: str=None, binaryTestLength: int=4096,
+               ignoreBinary: bool=False, maxLength: int=10*1000*1000):
     '''Reads a (possible binary) file into a string.
     @param filename: the name of the file to read
     @param sep: None or the split separator
@@ -138,14 +142,14 @@ def fileToText(filename, sep=None, binaryTestLength=4096, ignoreBinary=False, ma
     if statInfo is not None and statInfo.st_size <= maxLength:
         with open(filename, 'rb') as fp:
             content = fp.read()
-            if content and (not ignoreBinary or not base.StringUtils.isBinary(content, binaryTestLength)):
+            if content and (not ignoreBinary or not StringUtils.isBinary(content, binaryTestLength)):
                 rc = toString(content, 'bytes')
     if sep is not None:
         rc = rc.split(sep)
     return rc
 
 
-def firstMatch(aList, regExpr, start=0):
+def firstMatch(aList: Sequence[str], regExpr, start: int=0):
     r'''Return the matching object of the first matching line of a given line list.
     @param aList: an array of lines to inspect
     @param regExpr: a compiled regular expression, e.g. re.compile(r'^\w+ =\s(.*)$')
@@ -162,7 +166,7 @@ def firstMatch(aList, regExpr, start=0):
     return matcher
 
 
-def formatSize(size):
+def formatSize(size: int) -> str:
     '''Formats the filesize with minimal length.
     @param size: size in bytes
     @return: a string with a number and a unit, e.g. '103 kByte'
@@ -182,11 +186,11 @@ def formatSize(size):
         else:
             unit = 'TB'
             size /= 1000000000000.0
-        rc = '{:.3f} {:s}'.format(size, unit)
+        rc = f'{size:.3f} {unit}'
     return rc
 
 
-def fromFile(filename, sep=None):
+def fromFile(filename: str, sep: str=None):
     '''Returns the file content as a string. Only UTF-8 is allowed.
     @see fileToText() for other encodings
     @param filename: the name of the file to read
@@ -195,7 +199,7 @@ def fromFile(filename, sep=None):
     '''
     rc = ''
     if os.path.exists(filename):
-        with open(filename, 'r') as fp:
+        with open(filename, 'r', encoding='utf-8') as fp:
             try:
                 rc = fp.read()
             except UnicodeDecodeError as exc:
@@ -205,7 +209,7 @@ def fromFile(filename, sep=None):
     return rc
 
 
-def grepInFile(filename, regExpr, limit=None, group=None):
+def grepInFile(filename: str, regExpr, limit: int=None, group: int=None) -> Sequence[str]:
     r'''Returns all lines of a given file matching a given regular expression.
     @param filename: the name of the file to inspect
     @param regExpr: a compiled regular expression, e.g. re.compile(r'^\w+ =')
@@ -217,7 +221,7 @@ def grepInFile(filename, regExpr, limit=None, group=None):
     if isinstance(regExpr, str):
         regExpr = re.compile(regExpr)
     if os.path.exists(filename):
-        with open(filename, 'r') as fp:
+        with open(filename, 'r', encoding='utf-8') as fp:
             for line in fp:
                 line = line.strip()
                 matcher = regExpr.search(line)
@@ -233,14 +237,14 @@ def grepInFile(filename, regExpr, limit=None, group=None):
     return rc
 
 
-def hasContent(filename, beginOfComment='#'):
+def hasContent(filename: str, beginOfComment: str='#') -> bool:
     '''Tests whether a file has a content without empty lines or comment lines.
     @param beginOfComment    this string starts a comment line
     @return: True: there are lines which are not empty and not comments.
     '''
     rc = False
     if os.path.exists(filename):
-        with open(filename, 'r') as fp:
+        with open(filename, 'r', encoding='utf-8') as fp:
             for line in fp:
                 line = line.strip()
                 if line != '' and not line.startswith(beginOfComment):
@@ -249,12 +253,12 @@ def hasContent(filename, beginOfComment='#'):
     return rc
 
 
-def indentLines(lines, indention, indentStep=' '):
+def indentLines(lines: Sequence[str], indention: int, indentStep=' ') -> str:
     '''Indents some lines given as string.
     @param lines: a string with some lines delimited by '\n'
     @param indention: the number of indention steps of the output
     @param indentStep: the string representing one indention step, e.g. '\t'
-    @return: a string with the lines of lines with the given indention
+    @return: a string with the list of lines with the given indention
     '''
     lines = lines.split('\n')
     lines2 = []
@@ -264,7 +268,7 @@ def indentLines(lines, indention, indentStep=' '):
     return rc
 
 
-def isBinary(text, testLength=4096):
+def isBinary(text: str, testLength: int=4096) -> bool:
     '''Tests whether the text is binary.
     @param text: a str or a bytes instance
     @param testLength: the test is done only in prefix of text in this length
@@ -286,15 +290,16 @@ def isBinary(text, testLength=4096):
             if b'\x00' in piece:
                 rc = True
             else:
-                for bb in piece:
-                    if bb < 0x20 and not (9 <= bb  <= 13):
+                for aByte in piece:
+                    if aByte < 0x20 and not 9 <= aByte <= 13:
                         rc = True
                         break
         else:
             rc = True
     return rc
 
-def join(separator, args):
+
+def join(separator: str, args) -> str:
     '''Joins all entries of a list into a string.
     @param separator: the separator between the list items
     @param args: list to join. Items may be not strings
@@ -309,7 +314,7 @@ def join(separator, args):
     return rc
 
 
-def limitItemLength(array, maxLength, elipsis='...'):
+def limitItemLength(array: Sequence[str], maxLength: int, elipsis: str='...') -> Sequence[str]:
     '''Copies the input array and limits each item to the given maximum.
     @param array:    source array
     @param maxLength: the maximal length of each item of the result
@@ -328,7 +333,7 @@ def limitItemLength(array, maxLength, elipsis='...'):
     return rc
 
 
-def limitLength(string, maxLength, ellipsis='..'):
+def limitLength(string: str, maxLength: int, ellipsis: str='..') -> str:
     '''Returns the string or the head of the string if it is too long.
     @param string: the string to inspect
     @param maxLength: if the length of string is longer the result is the head of the string with this length
@@ -345,7 +350,7 @@ def limitLength(string, maxLength, ellipsis='..'):
     return rc
 
 
-def limitLength2(string, maxLength, ellipsis='..'):
+def limitLength2(string: str, maxLength: int, ellipsis: str='..') -> str:
     '''Returns the string or the head and tail of the string if it is too long.
     @param string: the string to inspect
     @param maxLength: if the length of string is longer the result is the head of the string with this length
@@ -368,7 +373,7 @@ def limitLength2(string, maxLength, ellipsis='..'):
     return rc
 
 
-def minimizeArrayUtfError(lines, logger=None):
+def minimizeArrayUtfError(lines: Sequence[str], logger: Logger.Logger=None) -> Sequence[str]:
     '''Converts a string array of bytes into an array of UTF-8 strings.
     It minimizes the part which can not be converted.
     @param lines: a list of byte lines
@@ -384,7 +389,7 @@ def minimizeArrayUtfError(lines, logger=None):
     return rc
 
 
-def minimizeStringUtfError(line, logger=None):
+def minimizeStringUtfError(line: str, logger: Logger.Logger=None) -> str:
     '''Converts a string of bytes into an UTF-8 string.
     It minimizes the part which can not be converted.
     @param lines: a list of byte lines
@@ -424,7 +429,7 @@ def minimizeStringUtfError(line, logger=None):
     return rc
 
 
-def parseDateTime(text, errors, dateOnly=False):
+def parseDateTime(text: str, errors: Sequence[str], dateOnly: bool=False):
     '''Parses a string representing a date or a datetime.
     @param text: the text to parse
     @param errors: IN/OUT: a list: error message will be appended here
@@ -472,7 +477,7 @@ def parseDateTime(text, errors, dateOnly=False):
     return rc
 
 
-def parseSize(size, errors):
+def parseSize(size: str, errors: Sequence[str]) -> int:
     '''Parses string with a filesize syntax.
     @param size: the string with the size to process, e.g. '44kiByte'
     @param errors: OUT: error messages will be appended to this list
@@ -511,7 +516,8 @@ def parseSize(size, errors):
     return rc
 
 
-def regExprCompile(pattern, location, logger=None, isCaseSensitive=False):
+def regExprCompile(pattern: str, location: str,
+                   logger: Logger.Logger=None, isCaseSensitive: bool=False):
     '''Compiles a regular expression.
     @param pattern: a regular expression.
     @param logger: for error logging
@@ -521,31 +527,31 @@ def regExprCompile(pattern, location, logger=None, isCaseSensitive=False):
     rc = None
     try:
         rc = re.compile(
-            pattern, 0 if isCaseSensitive else base.Const.IGNORE_CASE)
+            pattern, 0 if isCaseSensitive else Const.IGNORE_CASE)
     except re.error as exc:
         msg = f'error in regular expression in {location}: {exc}'
         _error(msg, logger)
     return rc
 
 
-def secondsToString(seconds):
+def secondsToString(seconds: int) -> str:
     '''Converts a number of seconds into a human readable string, e.g. '00:34:22'
     @param seconds: the seconds to convert
     @return: a string like '0:34:22'
     '''
-    rc = '{:02d}:{:02d}:{:02d}'.format(
-        seconds // 3600, seconds // 60 % 60, seconds % 60)
+    rc = f'{seconds // 3600:02d}:{seconds // 60 % 60:02d}:{seconds % 60:02d}'
     return rc
 
 
-def setLogger(logger):
+def setLogger(logger: Logger.Logger):
     '''Sets the global logger.
+    @deprecated: use MemoryLogger.globalLogger()
     '''
-    global LOGGER
-    LOGGER = logger
+    avoidWarning(logger)
 
 
-def toFile(filename, content, separator='', fileMode=None, user=None, group=None, ensureParent=False):
+def toFile(filename: str, content: str, separator: str='',
+           fileMode: int=None, user: int=None, group: int=None, ensureParent: bool=False):
     '''Writes a string into a file.
     @param filename: the name of the file to write
     @param content: the string to write
@@ -557,7 +563,7 @@ def toFile(filename, content, separator='', fileMode=None, user=None, group=None
     if ensureParent:
         parent = os.path.dirname(filename)
         if parent != '':
-            base.FileHelper.ensureDirectory(parent)
+            FileHelper.ensureDirectory(parent)
     if isinstance(content, list):
         content = separator.join(content)
     mode = 'wb' if isinstance(content, bytes) else 'w'
@@ -567,13 +573,13 @@ def toFile(filename, content, separator='', fileMode=None, user=None, group=None
         if fileMode is not None:
             os.chmod(filename, fileMode)
         if user is not None or group is not None:
-            os.chown(filename, base.LinuxUtils.userId(
-                user, -1), base.LinuxUtils.groupId(group, -1))
+            os.chown(filename, LinuxUtils.userId(
+                user, -1), LinuxUtils.groupId(group, -1))
     except OSError as exc:
         _error(f'cannot write to {filename}: {exc} [{type(exc)}]')
 
 
-def toFloat(value):
+def toFloat(value) -> float:
     '''Converts a string into a float.
     Possible data types: int, date, datetime, float.
     Value of date/datetime: seconds since 1.1.1970
@@ -666,11 +672,11 @@ def toFloatAndType(value):
                         rc = float(value)
                         dataType = 'float'
                     except ValueError:
-                        rc = 'float (or int or date(time)) expected, found: ' + value
+                        rc = f'float (or int or date(time)) expected, found: {value}'
     return [rc, dataType]
 
 
-def toString(value, dataType=None, floatPrecision=None):
+def toString(value, dataType: str=None, floatPrecision: int=None) -> str:
     '''Converts a numeric value into a string.
     @param value: a numeric value
     @param dataType: None: derive it from value otherwise: 'date', 'datetime', 'time', 'float', 'int'
@@ -699,18 +705,20 @@ def toString(value, dataType=None, floatPrecision=None):
         if isinstance(value, str) and value.find(':') >= 0:
             rc = value
         else:
-            rc = '{:2d}:{:2d}'.format(value / 3600, value % 3600 / 60)
+            rc = f'{value / 3600:2d}:{value % 3600 / 60:2d}'
     elif floatPrecision is not None:
         if isinstance(value, str):
             value = float(value)
-        aFormat = '{' + ':.{}f'.format(floatPrecision) + '}'
+        #aFormat = '{' + ':.{}f'.format(floatPrecision) + '}'
+        # ':.{floatPrecision}f'
+        aFormat = f'{{:.{floatPrecision}f}}'
         rc = aFormat.format(value)
     else:
-        rc = '{}'.format(value)
+        rc = f'{value}'
     return rc
 
 
-def tailOfWord(words, wordPrefix):
+def tailOfWord(words: str, wordPrefix: str) -> str:
     '''Returns the part of a word behind the word prefix.
     Example: words: "-e! -m" wordPrefix: "-e" result: "!"
     @param words: a string with words separated by space or tab
@@ -739,16 +747,16 @@ def tailOfWord(words, wordPrefix):
     return rc
 
 
-def unescChars(text):
+def unescChars(text: str):
     '''Returns the text without escaped meta characters like \n, \t, \\.
     Inversion: @see escChar()
     @param text: text to convert
     @return: the text with unescaped chars
     '''
-    def decode_match(match):
+    def decodeMatch(match):
         return codecs.decode(match.group(0), 'unicode-escape')
 
-    rc = REG_EXPR_ESC.sub(decode_match, text)
+    rc = REG_EXPR_ESC.sub(decodeMatch, text)
     return rc
 
 

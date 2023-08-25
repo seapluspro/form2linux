@@ -10,16 +10,17 @@ import os.path
 import shutil
 import fnmatch
 import subprocess
-import text.jsonutils as jsonutils
-import base.MemoryLogger
-import base.ProcessHelper
+from text import JsonUtils
+from base import MemoryLogger
+from base import ProcessHelper
+from base import StringUtils
 
 class CLIError(Exception):
     '''Generic exception to raise and log different fatal errors.'''
 
     def __init__(self, msg):
         super(CLIError).__init__(type(self))
-        self.msg = 'E: %s' % msg
+        self.msg = f'E: {msg}'
 
     def __str__(self):
         return self.msg
@@ -33,9 +34,15 @@ class BuilderStatus:
     _lastLogger = None
     @staticmethod
     def setLogger(logger):
+        '''Sets the logger
+        @param logger: the new "global" logger
+        '''
         BuilderStatus._lastLogger = logger
     @staticmethod
     def lastLogger():
+        '''Return the last created logger.
+        @return the last created logger
+        '''
         return BuilderStatus._lastLogger
 
 def lastLogger():
@@ -61,9 +68,9 @@ class Builder:
         self._links = {}
         self._baseDirectory = ''
         self._dry = dry
-        self._logger = base.MemoryLogger.MemoryLogger(1)
+        self._logger = MemoryLogger.MemoryLogger(1)
         BuilderStatus.setLogger(self._logger)
-        self._processHelper = base.ProcessHelper.ProcessHelper(self._logger)
+        self._processHelper = ProcessHelper.ProcessHelper.__init__(self, self._logger)
         self._standardDirectories = ('boot', 'dev', 'etc', 'etc/default', 'home', 'lib',
                                      'media', 'opt', 'run', 'sys',
                                      'tmp',
@@ -157,15 +164,16 @@ class Builder:
     def finishVariables(self):
         '''Does the things if all variables are inserted: expand the variables in the values.
         '''
-        for no in range(2):
+        for counter in range(2):
             for key in self._variables:
                 self._variables[key] = self.replaceVariables(self._variables[key])
-        if no > 2:
+        if counter > 2:
             self.error('Ups')
 
     def handleDirectories(self):
         '''Handles the directories: all files will be copied.
         '''
+        # pylint: disable-next=consider-using-dict-items
         for item in self._dirs:
             subDir = os.path.join(self._baseDirectory, self.replaceVariables(item))
             if not os.path.exists(subDir):
@@ -177,10 +185,10 @@ class Builder:
     def handleFiles(self):
         '''Handles the directories: all files will be copied.
         '''
-        for item in self._files:
+        for item, value in self._files.items():
             source = self.replaceVariables(item)
             hasWildcard = self.hasWildcard(source)
-            target = os.path.join(self._baseDirectory, self.replaceVariables(self._files[item]))
+            target = os.path.join(self._baseDirectory, self.replaceVariables(value))
             if target.endswith('/'):
                 baseTarget = target[0:-1]
                 nodeTarget = os.path.basename(source)
@@ -225,10 +233,10 @@ class Builder:
         @param value: the string to inspect
         @return the value with expanded variables
         '''
-        if value is not None and type(value) is str and value.find('%(') >= 0:
-            for key in self._variables:
+        if value is not None and isinstance(value, str) and value.find('%(') >= 0:
+            for key, value2 in self._variables.items():
                 variable = f'%({key})'
-                value = value.replace(variable, self._variables[key])
+                value = value.replace(variable, value2)
         return value
 
     def makeDirectory(self, name):
@@ -240,18 +248,22 @@ class Builder:
         else:
             os.makedirs(name, 0o777)
 
-    def runProgram(self, command: str, asRoot: bool=True, verbose: bool=True):
+    def runProgram(self, command: str, asRoot: bool=True, verbose: bool=True, outputFile: str=None):
         '''Runs a program if it possible or print the command if not.
         @param command: the command to execute
         @param asRoot: <em>True</em>: the command must be executed as root
         @param verbose: <em>True</em>: show the command
+        @param outputFile: <em>None</em> or the file where the program output is stored
         '''
         if not self._dry and (not asRoot or os.geteuid() == 0):
             output = subprocess.check_output(command.split(' '))
-            if verbose and output != b'':
+            if outputFile is not None:
+                StringUtils.toFile(outputFile, output.decode('utf-8'))
+            elif verbose and output != b'':
                 self.log(output.decode('utf-8'))
         else:
-            self.log(f'sudo {command}')
+            out = '' if outputFile is None else f' >{outputFile}'
+            self.log(f'sudo {command}{out}')
 
     def setVariable(self, name, value):
         '''Sets a variable.
@@ -266,8 +278,6 @@ class Builder:
         @param nodeType: the node must have that node type
         @return the value of the node with expanded variables
         '''
-        value = jsonutils.nodeOfJsonTree(self._root, path, nodeType, False)
+        value = JsonUtils.nodeOfJsonTree(self._root, path, nodeType, False)
         value = self.replaceVariables(value)
         return value
-
-

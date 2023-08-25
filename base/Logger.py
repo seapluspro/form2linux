@@ -5,16 +5,18 @@ Created on: 20.08.2023
     Author: SeaPlusPro
    License: CC0 1.0 Universal
 '''
-import base.Const
+from base import Const
 
 class Logger:
     '''Base class of the loggers.
     The derived class must implement the method log(message)
     '''
-    def __init__(self, verboseLevel):
+    _lastInstance = None
+    def __init__(self, verboseLevel: int):
         '''Constructor.
         @param verboseLevel: logging is done only if minLevel < verboseLevel. minLevel is a parameter of log() 
         '''
+        Logger._lastInstance = self
         self._verboseLevel = verboseLevel
         self._logDebug = True
         self._logInfo = True
@@ -25,7 +27,7 @@ class Logger:
         self._mirrorLogger = None
         self._inUse = False
 
-    def debug(self, message):
+    def debug(self, message: str) -> bool:
         '''Logs a debugging message.
         @param message: the message to log
         @return: True
@@ -38,7 +40,7 @@ class Logger:
             self._inUse = False
         return True
 
-    def error(self, message):
+    def error(self, message: str) -> bool:
         '''Logs a message.
         @param message: the error message to log
         @return: False
@@ -60,7 +62,23 @@ class Logger:
             self._inUse = False
         return False
 
-    def info(self, message):
+    def errors(self):
+        '''Return the error list.
+        '''
+        return self._errors
+
+    def firstErrors(self):
+        '''Return the first error list.
+        '''
+        return self._firstErrors
+
+    @staticmethod
+    def globalLogger():
+        '''Returns the last instantiated logger.
+        '''
+        return Logger._lastInstance
+
+    def info(self, message: str) -> bool:
         '''Logs an info message.
         @param message: the message to log
         @return: True
@@ -73,7 +91,7 @@ class Logger:
             self._inUse = False
         return True
 
-    def log(self, message=None, minLevel=base.Const.LEVEL_SUMMARY):
+    def log(self, message: str, minLevel=Const.LEVEL_SUMMARY) -> bool:
         '''Logs a message.
         @param message: the string to log
         @param level: logging will be done only if level >= self._verboseLevel
@@ -88,7 +106,7 @@ class Logger:
             logger.setLogger(self._mirrorLogger)
         self._mirrorLogger = logger
 
-    def setErrorFilter(self, excluded, mirrorsToo=True):
+    def setErrorFilter(self, excluded, mirrorsToo: bool=True):
         '''Sets the error filter: if the pattern matches the error is ignored (not logged)
         @param excluded: string: a substring of the ignored error
                 re.RegExpression: a compiled regular expression of the ignored errors
@@ -102,9 +120,12 @@ class Logger:
         '''Transfers the error from another logger.
         @param logger: the source of the errors to transfer
         '''
-        self._errors += logger._errors
-        self._firstErrors += logger._firstErrors
+        self._errors += logger.errors()
+        self._firstErrors += logger.firstErrors()
 
-
+    def verboseLevel(self) -> int:
+        '''Returns the verbose level.
+        '''
+        return self._verboseLevel
 if __name__ == '__main__':
     pass

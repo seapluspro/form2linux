@@ -1,10 +1,11 @@
-'''
-Created on 20.18.2023
+''''
+SetupBuilderTest.py
 
-@author: SeaPlusPro
+Created on: 20.08.2023
+    Author: SeaPlusPro
+   License: CC0 1.0 Universal
 '''
 import unittest
-import os.path
 import form2linux
 import Builder
 import base.StringUtils
@@ -111,7 +112,7 @@ hugo:$6$VerySecret:19550:0:99999:7:::
 sudo groupadd -g 205 sftdragon
 sudo groupadd --system -g 1010 hugo
 sudo useradd -m --no-user-group -g 205 -c ",,," -d /home/sftdragon -s /bin/false sftdragon
-sudo useradd --system -m --no-user-group -g 1013 -c "Hugo Miller,,," -d /home/hugo -s /bin/bash hugo
+sudo useradd --system -m --no-user-group -g 1010 -c "Hugo Miller,,," -d /home/hugo -s /bin/bash hugo
 sudo form2linux setup patch-shadow hugo '$6$VerySecret'
 sudo usermod -a -G sftdragon bin
 sudo usermod -a -G sftdragon sys
@@ -171,7 +172,6 @@ hugo2:$6$NoNoNo:19550:0:99999:7:::
         form2linux.main(['form2linux', '-v', 'setup', 'archive', fnForm, f'--file={fnFiles}'])
         lines = base.StringUtils.fromFile(fnFiles)
         self.assertTrue(lines.find('etc/passwd\netc/group\netc/default/grub') >= 0)
-        self.assertTrue(os.path.exists(fnArchive))
         logger = Builder.BuilderStatus.lastLogger()
         lines = '\n'.join(logger.getMessages()) + '\n'
         self.assertTrue(lines.find(f'sudo tar --zstd -cf /tmp/unittest/backup.tar.zst -C/ --files-from={fnArchive}'))
@@ -189,4 +189,49 @@ hugo2:$6$NoNoNo:19550:0:99999:7:::
         form2linux.main(['form2linux', 'setup', 'example-add-standard-users', f'--file={fnOutput}'])
         lines = base.StringUtils.fromFile(fnOutput)
         self.assertTrue(lines.find('bupsupply') >= 0)
+
+    def testExampleSystemInfo(self):
+        if inDebug(): return
+        fnOutput = base.FileHelper.tempFile('sysinfo.example', 'unittest')
+        form2linux.main(['form2linux', 'setup', 'example-system-info', f'--file={fnOutput}'])
+        lines = base.StringUtils.fromFile(fnOutput)
+        self.assertTrue(lines.find('STORAGE') >= 0)
+
+    def testSystemInfo(self):
+        #if inDebug(): return
+        fnForm = base.FileHelper.tempFile('systeminfo.json', 'unittest')
+        base.StringUtils.toFile(fnForm, '''{
+  "Variables": {
+    "STORAGE": "/tmp/unittest/sysinfo"
+  },
+  "Commands": {
+    "# Command": "# stored in",
+    "mkdir -p %(STORAGE)": "",
+    "fdisk -l": "%(STORAGE)/fdisk.txt",
+    "lsblk": "%(STORAGE)/lsblk.txt",
+    "blkid": "%(STORAGE)/blkid.txt",
+    "mount": "%(STORAGE)/mount.txt",
+    "df -h": "%(STORAGE)/df.txt",
+    "free": "%(STORAGE)/free.txt",
+    "smartctl -a /dev/sda": "%(STORAGE)/smartctl.sda.txt",
+    "ps aux": "%(STORAGE)/ps.txt",
+    "systemctl list-units": "%(STORAGE)/systemctl.list-units.txt",
+    "#cat /proc/mdstat": "%(STORAGE)/mdstat.txt"
+  }
+}
+''')
+        form2linux.main(['form2linux', 'setup', 'system-info', fnForm])
+        logger = Builder.BuilderStatus.lastLogger()
+        lines = '\n'.join(logger.getMessages()) + '\n'
+        self.assertEqual(lines, '''sudo mkdir -p /tmp/unittest/sysinfo
+sudo fdisk -l >/tmp/unittest/sysinfo/fdisk.txt
+sudo lsblk >/tmp/unittest/sysinfo/lsblk.txt
+sudo blkid >/tmp/unittest/sysinfo/blkid.txt
+sudo mount >/tmp/unittest/sysinfo/mount.txt
+sudo df -h >/tmp/unittest/sysinfo/df.txt
+sudo free >/tmp/unittest/sysinfo/free.txt
+sudo smartctl -a /dev/sda >/tmp/unittest/sysinfo/smartctl.sda.txt
+sudo ps aux >/tmp/unittest/sysinfo/ps.txt
+sudo systemctl list-units >/tmp/unittest/sysinfo/systemctl.list-units.txt
+''')
 

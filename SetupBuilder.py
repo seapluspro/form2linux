@@ -11,11 +11,13 @@ import json
 import pwd
 import grp
 import time
-import text.jsonutils as jsonutils
-import base.StringUtils
+from text import JsonUtils
+from base import StringUtils
+from base import FileHelper
 from Builder import Builder, CLIError
 
 
+# pylint: disable-next=too-few-public-methods
 class UserData:
     '''Stores the user properties.
     '''
@@ -29,14 +31,15 @@ class UserData:
         @param shell: the default shell
         @param desc: the description
         '''
-        self._name = name
-        self._uid = uid
-        self._gid = gid
-        self._home = home
-        self._shell = shell
-        self._desc = desc
+        self.name = name
+        self.uid = uid
+        self.gid = gid
+        self.home = home
+        self.shell = shell
+        self.desk = desc
 
 
+# pylint: disable-next=too-few-public-methods
 class GroupData:
     '''Stores the user properties.
     '''
@@ -47,9 +50,9 @@ class GroupData:
         @param gid: the group id
         @param members: a comma separated list of user names
         '''
-        self._name = name
-        self._gid = gid
-        self._members = members
+        self.name = name
+        self.gid = gid
+        self.members = members
 
 
 class SetupBuilder (Builder):
@@ -72,6 +75,7 @@ class SetupBuilder (Builder):
         self._nameGroupSaved = {}
         self._shadowSaved = {}
         self._command = None
+        self._commands = {}
 
     def _byGroupId(self, gid: int):
         '''Get the group info given by the id.
@@ -79,10 +83,9 @@ class SetupBuilder (Builder):
         @return None or the group entry
         '''
         rc = None
-        for ix in range(len(self._activeGroups)):
-            if self._activeGroups[ix].gr_gid == gid:
-                rc = self._activeGroups[ix]
-                break
+        for entry in self._activeGroups:
+            if entry.gr_gid == gid:
+                rc = entry
         return rc
 
     def _byGroupName(self, name):
@@ -91,9 +94,9 @@ class SetupBuilder (Builder):
         @return None or the group entry
         '''
         rc = None
-        for ix in range(len(self._activeGroups)):
-            if self._activeGroups[ix].gr_name == name:
-                rc = self._activeGroups[ix]
+        for entry in self._activeGroups:
+            if entry.gr_name == name:
+                rc = entry
                 break
         return rc
 
@@ -103,9 +106,9 @@ class SetupBuilder (Builder):
         @return None or the user entry
         '''
         rc = None
-        for ix in range(len(self._activeUsers)):
-            if self._activeUsers[ix].pw_uid == uid:
-                rc = self._activeUsers[ix]
+        for entry in self._activeUsers:
+            if entry.pw_uid == uid:
+                rc = entry
                 break
         return rc
 
@@ -115,43 +118,11 @@ class SetupBuilder (Builder):
         @return None or the user entry
         '''
         rc = None
-        for ix in range(len(self._activeUsers)):
-            if self._activeUsers[ix].pw_name == name:
-                rc = self._activeUsers[ix]
+        for entry in self._activeUsers:
+            if entry.pw_name == name:
+                rc = entry
                 break
         return rc
-
-    def exampleStandardUsers(self, filename: str):
-        '''Shows the example for the configuration file of "add-standard-users".
-        @param filename: None or the file to store
-        '''
-        message = '''{
-  "Variables": {
-    "SHELL": "/bin/bash",
-    "NOLOGIN": "/usr/sbin/nologin"
-  },
-  "Users": {
-    "bupsrv": { "Uid": 201, "Gid": 201, "Home": "*", "Shell": "%(SHELL)", "Desc": "receiver for external archive"},
-    "bupsupply": { "Uid": 203, "Gid": 203, "Home": "*", "Shell": "%(SHELL)", "Desc": "receiver for external data"},
-    "bupwiki": { "Uid": 205, "Gid": 205, "Home": "*", "Shell": "%(SHELL)", "Desc": "receiver for wiki data"},
-    "extbup": { "Uid": 212, "Gid": 212, "Home": "*", "Shell": "%(SHELL)", "Desc": "sender for archive data"},
-    "extcloud": { "Uid": 213, "Gid": 213, "Home": "*", "Shell": "%(SHELL)", "Desc": "sender for cloud data"},
-    "extdata": { "Uid": 214, "Gid": 214, "Home": "*", "Shell": "%(SHELL)", "Desc": "sender for other data"}
-  },
-  "Groups": {
-    "bupsrv": 201,
-    "bupsupply": 203,
-    "bupwiki": 205,
-    "extbup": 212,
-    "extcloud": 213,
-    "extdata": 214
-  }
-}
-'''
-        if filename is None:
-            self.log(message)
-        else:
-            base.StringUtils.toFile(filename, message)
 
     def adaptUsers(self, passwd: str, group: str, shadow: str):
         '''Compares two passwd/group files:
@@ -162,30 +133,28 @@ class SetupBuilder (Builder):
         @param shadow: the name of the 2nd shadow password file
         '''
         self.checkAdaptUsers(passwd, group, shadow)
-        for group in self._groups:
-            entry = self._groups[group]
-            gid = int(entry._gid)
+        for group2, entry in self._groups.items():
+            gid = int(entry.gid)
             system = '' if gid < 1000 else '--system '
-            self.runProgram(f'groupadd {system}-g {gid} {group}', True)
-        for user in self._users:
-            entry = self._users[user]
-            system = '' if int(entry._uid) < 1000 else '--system '
+            self.runProgram(f'groupadd {system}-g {gid} {group2}', True)
+        for user, entry in self._users.items():
+            system = '' if int(entry.uid) < 1000 else '--system '
             self.runProgram(
-                f'useradd {system}-m --no-user-group -g {entry._gid} -c "{entry._desc}" -d {entry._home} -s {entry._shell} {user}', True)
+                f'useradd {system}-m --no-user-group -g {entry.uid} -c "{entry.desk}" -d {entry.home} -s {entry.shell} {user}',
+                True)
             passwd = '' if user not in self._shadowSaved else self._shadowSaved[user]
             if len(passwd) > 5:
                 if os.geteuid() == 0:
-                    self.patchShadow(user, passwd)
+                    self.patchShadow(user, passwd, shadow)
                 else:
                     self.log(
                         f"sudo form2linux setup patch-shadow {user} '{passwd}'")
-        for group in self._groups:
-            entry = self._groups[group]
-            gid = entry._gid
-            members = entry._members
+        for group2, entry in self._groups.items():
+            gid = entry.gid
+            members = entry.members
             for member in members.split(','):
                 if member != '':
-                    self.runProgram(f'usermod -a -G {group} {member}', True)
+                    self.runProgram(f'usermod -a -G {group2} {member}', True)
 
     def addStandardUsers(self, form):
         '''Compares the form entries with the system user/group files.
@@ -194,15 +163,14 @@ class SetupBuilder (Builder):
         @param form: the name of the form with Json format
         '''
         self.checkStandardUsers(form)
-        for group in self._groups:
-            gid = self._groups[group]
+        for group, gid in self._groups.items():
             system = '' if gid < 1000 else '--system '
             self.runProgram(f'groupadd {system}-g {gid} {group}', True)
-        for user in self._users:
-            entry = self._users[user]
-            system = '' if entry._uid < 1000 else '--system '
+        for user, entry in self._users.items():
+            system = '' if entry.uid < 1000 else '--system '
             self.runProgram(
-                f'useradd {system}-m --no-user-group -g {entry._gid} -c "{entry._desc}" -d {entry._home} -s {entry._shell} {user}', True)
+                f'useradd {system}-m --no-user-group -g {entry.uid} -c "{entry.desk}" -d {entry.home} -s {entry.shell} {user}',
+                True)
 
     def archive(self, form: str, filesList: str):
         '''Stores files into a archive using a user defined command.
@@ -212,7 +180,7 @@ class SetupBuilder (Builder):
         if filesList == '*':
             filesList = f'/tmp/f2l.files.{int(time.time())%86400}.lst'
         self.checkArchive(form)
-        with open(filesList, 'w') as fp:
+        with open(filesList, 'w', encoding='utf-8') as fp:
             for file in self._files:
                 # write without preceding '/'
                 fp.write(f'{file[1:]}\n')
@@ -225,7 +193,7 @@ class SetupBuilder (Builder):
         @param group: the name of the 2nd group file
         @param shadow: the name of the 2nd shadow password file
         '''
-        with open(passwd, 'r') as fp:
+        with open(passwd, 'r', encoding='utf-8') as fp:
             for line in fp:
                 line = line.strip()
                 # 0................1.2...3...4.......5............6
@@ -236,7 +204,7 @@ class SetupBuilder (Builder):
                                  parts[5], parts[6], parts[4])
                 self._idPwSaved[int(parts[2])] = entry
                 self._namePwSaved[parts[0]] = entry
-        with open(group, 'r') as fp:
+        with open(group, 'r', encoding='utf-8') as fp:
             for line in fp:
                 line = line.strip()
                 # 0.....1.2..3
@@ -248,15 +216,14 @@ class SetupBuilder (Builder):
                     entry = GroupData(parts[0], parts[2], members)
                     self._idGroupSaved[int(parts[2])] = entry
                     self._nameGroupSaved[parts[0]] = entry
-        with open(shadow, 'r') as fp:
+        with open(shadow, 'r', encoding='utf-8') as fp:
             for line in fp:
                 # 0.....1.2.....3
                 # statd:*:19255:0:99999:7:::
                 parts = line.split(':')
                 self._shadowSaved[parts[0]] = parts[1]
-        for user in self._namePwSaved:
-            entry = self._namePwSaved[user]
-            uid = entry._uid
+        for user, entry in self._namePwSaved.items():
+            uid = entry.uid
             entry2 = self._byUserName(user)
             entry3 = self._byUserId(uid)
             if entry3 is not None and entry3.pw_name != user:
@@ -271,34 +238,33 @@ class SetupBuilder (Builder):
                         f'user {user} already exists with another uid: {uid} / {uidActive}')
                 else:
                     self.info(f'# user {user} already exists')
-        for group in self._nameGroupSaved:
-            entry = self._nameGroupSaved[group]
-            gid = entry._gid
+        for group2, entry in self._nameGroupSaved.items():
+            gid = entry.gid
             entry2 = self._byGroupId(gid)
-            entry3 = self._byGroupName(group)
-            if entry2 is not None and entry2.gr_name != group:
+            entry3 = self._byGroupName(group2)
+            if entry2 is not None and entry2.gr_name != group2:
                 self.error(
-                    f'group id {gid} [{group}] already exists: {entry2.gr_name}')
+                    f'group id {gid} [{group2}] already exists: {entry2.gr_name}')
             elif entry3 is None:
-                self._groups[group] = entry
+                self._groups[group2] = entry
             else:
                 gidActive = entry3.gr_gid
                 if int(gidActive) != int(gid):
                     self.error(
-                        f'group {group} already exists with another uid: {gid} / {gidActive}')
+                        f'group {group2} already exists with another uid: {gid} / {gidActive}')
                 else:
-                    self.info(f'# group {group} already exists')
+                    self.info(f'# group {group2} already exists')
 
     def checkArchive(self, form: str):
         '''Checks the data for the method addStandardUsers and store the data that must be inserted.
         @param form: the name of the form with Json format
         '''
         self._files = []
-        with open(form, 'r') as fp:
+        with open(form, 'r', encoding='utf-8') as fp:
             data = fp.read()
             self._root = root = json.loads(data)
             path = 'Files:m Command:s Variables:m'
-            jsonutils.checkJsonMapAndRaise(root, path, True)
+            JsonUtils.checkJsonMapAndRaise(root, path, True, 'Comment:s')
             variables = root['Variables']
             self._command = self.valueOf('Command')
             if self._command.find('%FILE%') < 0:
@@ -312,19 +278,18 @@ class SetupBuilder (Builder):
                 if not path2.startswith('/'):
                     self.error(f'path is not absolute: {path}')
                 fileList = self.valueOf(f'Files {path2}')
-                base.FileHelper.expandWildcards(path2, fileList, self._files)
+                # # pylint: disable-next=no-member
+                FileHelper.expandWildcards(path2, fileList, self._files)
 
     def checkStandardUsers(self, form):
-        '''Compares the form entries with the system user/group files.
-        If the form contains a member not known in the system user/group file 
-        that member will be inserted with "useradd" or "groupadd"
+        '''Tests the form of the command "add-standard-users" and store the data.
         @param form: the name of the form with Json format
         '''
-        with open(form, 'r') as fp:
+        with open(form, 'r', encoding='utf-8') as fp:
             data = fp.read()
             self._root = root = json.loads(data)
             path = 'Users:m Groups:m Variables:m'
-            jsonutils.checkJsonMapAndRaise(root, path, True)
+            JsonUtils.checkJsonMapAndRaise(root, path, True, 'Comment:s')
             variables = root['Variables']
             for name in variables:
                 self.setVariable(name, variables[name])
@@ -333,7 +298,7 @@ class SetupBuilder (Builder):
             for user in users:
                 path = 'Uid:i Gid:i Home:s Shell:s Desc:s'
                 entry = users[user]
-                jsonutils.checkJsonMapAndRaise(entry, path, True)
+                JsonUtils.checkJsonMapAndRaise(entry, path, True, 'Comment:s')
                 if not re.match(r'^[a-z][\w-]*$', user):
                     raise CLIError(f'wrong username: {user}')
                 shell = self.valueOf(f'Users {user} Shell')
@@ -381,6 +346,28 @@ class SetupBuilder (Builder):
                     else:
                         self.info(f'# group {group} already exists')
 
+    def checkSystemInfo(self, form):
+        '''Tests the form of the command "system-info".
+        @param form: the name of the form with Json format
+        '''
+        with open(form, 'r', encoding='utf-8') as fp:
+            data = fp.read()
+            self._root = root = json.loads(data)
+            path = 'Commands:m Variables:m'
+            JsonUtils.checkJsonMapAndRaise(root, path, True, 'Comment:s')
+            variables = root['Variables']
+            for name in variables:
+                self.setVariable(name, variables[name])
+            self.finishVariables()
+            commands = root['Commands']
+            for key in commands:
+                key2 = self.replaceVariables(key)
+                if key2.startswith('#'):
+                    continue
+                if key2 in self._commands:
+                    raise CLIError(f'{form}: duplicate entry: {key}')
+                self._commands[key2] = self.replaceVariables(commands[key])
+
     def exampleArchive(self, filename: str):
         '''Shows the example for the configuration of the archive command.
         @param filename: None or the file to store
@@ -404,7 +391,68 @@ class SetupBuilder (Builder):
         if filename is None:
             self.log(message)
         else:
-            base.StringUtils.toFile(filename, message)
+            StringUtils.toFile(filename, message)
+
+    def exampleSystemInfo(self, filename: str):
+        '''Shows the example for the configuration of the "system-info" command.
+        @param filename: None or the file to store
+        '''
+        message = '''{
+  "Variables": {
+    "STORAGE": "/home/sysinfo"
+  },
+  "Commands": {
+    "# Command": "# stored in",
+    "fdisk -l": "%(STORAGE)/fdisk.txt",
+    "lsblk": "%(STORAGE)/lsblk.txt",
+    "blkid": "%(STORAGE)/blkid.txt",
+    "mount": "%(STORAGE)/mount.txt",
+    "df -h": "%(STORAGE)/df.txt",
+    "free": "%(STORAGE)/free.txt",
+    "smartctl -a /dev/nvme0n1": "%(STORAGE)/smartctl.nvme0n1.txt",
+    "smartctl -a /dev/sda": "%(STORAGE)/smartctl.sda.txt",
+    "ps aux": "%(STORAGE)/ps.txt",
+    "systemctl list-units": "%(STORAGE)/systemctl.list-units.txt",
+    "#cat /proc/mdstat": %(STORAGE)/mdstat.txt"
+  }
+}
+'''
+        if filename is None:
+            self.log(message)
+        else:
+            StringUtils.toFile(filename, message)
+
+    def exampleStandardUsers(self, filename: str):
+        '''Shows the example for the configuration file of "add-standard-users".
+        @param filename: None or the file to store
+        '''
+        message = '''{
+  "Variables": {
+    "SHELL": "/bin/bash",
+    "NOLOGIN": "/usr/sbin/nologin"
+  },
+  "Users": {
+    "bupsrv": { "Uid": 201, "Gid": 201, "Home": "*", "Shell": "%(SHELL)", "Desc": "receiver for external archive"},
+    "bupsupply": { "Uid": 203, "Gid": 203, "Home": "*", "Shell": "%(SHELL)", "Desc": "receiver for external data"},
+    "bupwiki": { "Uid": 205, "Gid": 205, "Home": "*", "Shell": "%(SHELL)", "Desc": "receiver for wiki data"},
+    "extbup": { "Uid": 212, "Gid": 212, "Home": "*", "Shell": "%(SHELL)", "Desc": "sender for archive data"},
+    "extcloud": { "Uid": 213, "Gid": 213, "Home": "*", "Shell": "%(SHELL)", "Desc": "sender for cloud data"},
+    "extdata": { "Uid": 214, "Gid": 214, "Home": "*", "Shell": "%(SHELL)", "Desc": "sender for other data"}
+  },
+  "Groups": {
+    "bupsrv": 201,
+    "bupsupply": 203,
+    "bupwiki": 205,
+    "extbup": 212,
+    "extcloud": 213,
+    "extdata": 214
+  }
+}
+'''
+        if filename is None:
+            self.log(message)
+        else:
+            StringUtils.toFile(filename, message)
 
     def patchShadow(self, user: str, passwd: str, shadow: str):
         '''Replaces in the shadow file a encoded password with a given value.
@@ -412,7 +460,7 @@ class SetupBuilder (Builder):
         @param passwd: the new value of the encoded password
         @param shadow: the name of the shadow file
         '''
-        with open(shadow, 'r') as fp:
+        with open(shadow, 'r', encoding='utf-8') as fp:
             lines = []
             found = False
             changed = False
@@ -430,6 +478,15 @@ class SetupBuilder (Builder):
                 if self._dry:
                     self.log(f'# dry mode: not written {shadow}')
                 else:
-                    with open(shadow, 'w') as fp:
+                    with open(shadow, 'w', encoding='utf-8') as fp:
                         fp.write(''.join(lines))
                         self.info('# written: {shadow}')
+
+    def systemInfo(self, form: str):
+        '''Starts programs defined in a configuration to collect information about the system state.
+        @param form: the name of the form with Json format
+        '''
+        self.checkSystemInfo(form)
+        for command, output in self._commands.items():
+            self.runProgram(command, True, True,
+                            output if output != '' else None)

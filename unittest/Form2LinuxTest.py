@@ -1,7 +1,9 @@
 '''
-Created on 20.18.2023
+Form2LinuxTest.py
 
-@author: SeaPlusPro
+Created on: 20.08.2023
+    Author: SeaPlusPro
+   License: CC0 1.0 Universal
 '''
 import unittest
 import form2linux

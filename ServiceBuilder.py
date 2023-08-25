@@ -9,9 +9,9 @@ import re
 import json
 import pwd
 import grp
-import text.jsonutils as jsonutils
+from text import JsonUtils
 from Builder import Builder, CLIError
-import base.StringUtils
+from base import StringUtils
 
 
 class ServiceBuilder (Builder):
@@ -42,7 +42,7 @@ class ServiceBuilder (Builder):
     def buildFile(self):
         '''Creates the service definition file used from SystemD.
         '''
-        with open(self._file, 'w') as fp:
+        with open(self._file, 'w', encoding='utf-8') as fp:
             group = '' if self._group == '' else f'\nGroup={self._group}'
             reload = f'ExecReload={self._execReload}'
             if self._execReload == '':
@@ -71,15 +71,15 @@ WantedBy=multi-user.target
         '''Tests the configuration data and stores it.
         @param configuration: the Json file
         '''
-        with open(configuration, 'r') as fp:
+        with open(configuration, 'r', encoding='utf-8') as fp:
             data = fp.read()
             self._root = root = json.loads(data)
             path = 'Service:m Directories:a Files:m Links:m'
-            jsonutils.checkJsonMapAndRaise(root, path, True, 'Variables:m')
+            JsonUtils.checkJsonMapAndRaise(root, path, True, 'Comment:s Variables:m')
             service = root['Service']
             path = 'Name:s Description:s File:s User:s Group:s WorkingDirectory:s EnvironmentFile:s' + \
                 ' ExecStart:s ExecReload:s SyslogIdentifier:s StandardOutput:s StandardError:s Restart:s RestartSec:i'
-            jsonutils.checkJsonMapAndRaise(service, path, True)
+            JsonUtils.checkJsonMapAndRaise(service, path, True, 'Comment:s')
             variables = root['Variables']
             for name in variables:
                 self.setVariable(name, variables[name])
@@ -157,7 +157,7 @@ WantedBy=multi-user.target
         if filename is None:
             self.log(message)
         else:
-            base.StringUtils.toFile(filename, message)
+            StringUtils.toFile(filename, message)
 
     def install(self, configuration: str):
         '''Installs the service.

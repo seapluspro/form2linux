@@ -7,358 +7,360 @@ Created on: 20.08.2023
 '''
 import re
 
-import base.Const
-import base.StringUtils
-import base.SearchRule
+from base import Const
+from base import StringUtils
+from text import SearchRule
+from base import Logger
+
 
 class SearchRuleList:
     '''A list of rules to find a new position or do some other things.
     @see describe() for detailed description.
     '''
-    #..........................rule
+    # ..........................rule
     # .........................1
-    __reRule = re.compile(r'%[a-zA-Z_]\w*%:'
-                          #        rule
-                          #........A
-                          + r'|(?:[be]of|[be]o[pn]?l'
-                          #...........line........col
-                          #.............1...1......2...2
+    reRule = re.compile(r'%[a-zA-Z_]\w*%:'
+                        #        rule
+                        # ........A
+                        + r'|(?:[be]of|[be]o[pn]?l'
+                        # ...........line........col
+                          # .............1...1......2...2
                           + r'|[+-]?(\d+):[+-]?(\d+)'
-                          #..............sep.....sep rows/cols
-                          #..............3..3........C.......C
+                          # ..............sep.....sep rows/cols
+                          # ..............3..3........C.......C
                           + r'|[<>FB](\S).+?\3\s?(?::?\d+)?\s?[ie]{0,2}'
-                          #.command.name
+                          # .command.name
                           # .......4E
                           + r'|((?:add|cut|expr|group|insert|jump'
                           # ........................................./name
                           # .........................................E
                           + r'|mark|print|replace|set|state|swap)'
-                          #..suffix1 name...............suffix2.........text.delim......txt-opt /t /command
+                          # ..suffix1 name...............suffix2.........text.delim......txt-opt /t /command
                           # ......F...G........... ....GF.H...........H.I...5.....5.....J......J.I.4
                           + r'(?:-(?:[a-zA-Z]|\d\d?))?(?:-[a-zA-Z])?(?::([^\s]).*?\5(?:e=\S)?)?)'
-                          #.......A
+                          # .......A
                           + r')')
-    __reRuleExprParams = re.compile(r'[-+/*%](\$[A-Z]|\d+)?')
+    reRuleExprParams = re.compile(r'[-+/*%](\$[A-Z]|\d+)?')
     # .........................1......12..............2.3.........3
-    __reCommand = re.compile(r'([a-z]+)(-[a-zA-Z]|-\d+)?(-[a-zA-Z])?')
-    __reRuleStateParam = re.compile(r'rows?|col|size-[A-Z]|rows-[A-Z]|hits')
-    __reFlowControl = re.compile(
+    reCommand = re.compile(r'([a-z]+)(-[a-zA-Z]|-\d+)?(-[a-zA-Z])?')
+    reRuleStateParam = re.compile(r'rows?|col|size-[A-Z]|rows-[A-Z]|hits')
+    reFlowControl = re.compile(
         r'(success|error):(continue|error|stop|%\w+%)')
     # ....................................A.........  A..1......12...2..3..3..4...........4
-    __reRuleReplace = re.compile(
+    reRuleReplace = re.compile(
         r'replace(?:-[a-zA-Z])?:([^\s])(.+?)\1(.*?)\1(e=.|,|c=\d+)*')
     # x=re.compile(r'replace:([^\s])(.+)\1(.*)\1(e=.)?')
 
-    def __init__(self, logger, rules=None):
+    def __init__(self, logger: Logger.Logger, rules=None):
         '''Constructor.
         @param rules: None or the rules as string
             Example: '>/logfile:/ -2:0 bol':
             search forwards "logfile:" go backward 2 line 0 column, go to begin of line
         '''
-        self._logger = logger
-        self._col = 0
-        self._currentRule = ''
-        self._errorCount = 0
-        self._rules = []
-        self._labels = {}
-        self._markers = {}
-        self._fpTrace = None
-        self._maxLoops = None
+        self.logger = logger
+        self.col = 0
+        self.currentRule = ''
+        self.errorCount = 0
+        self.rules = []
+        self.labels = {}
+        self.markers = {}
+        self.fpTrace = None
+        self.maxLoops = None
         if rules is not None:
             self.parseRules(rules)
 
-    def appendCommand(self, name, commandData):
+    def appendCommand(self, name: str, commandData: SearchRule.CommandData):
         '''Stores the command data in the _rules.
         Stores markers defined by "mark".
         Tests used markers for a previous definition.
         @param name: the name of the command, e.g. 'add'. Will be used as _ruleType
-        @param commandData: an instance of base.SearchRule.CommandData
+        @param commandData: an instance of SearchRule.CommandData
         '''
         if name == 'mark':
-            self._markers[commandData._marker] = self._col
-        elif commandData._marker is not None and commandData._marker not in self._markers:
+            self.markers[commandData.marker] = self.col
+        elif commandData.marker is not None and commandData.marker not in self.markers:
             self.parseError(
-                'marker {} was not previously defined'.format(commandData._marker))
-        self._rules.append(base.SearchRule.SearchRule(name, commandData))
+                f'marker {commandData.marker} was not previously defined')
+        self.rules.append(SearchRule.SearchRule(name, commandData))
 
-    def apply(self, state):
+    def apply(self, state: SearchRule.ProcessState):
         '''Executes the internal stored rules in a given list of lines inside a range.
         @param state: IN/OUT IN: the context to search OUT: the state at the end of applying the rule list
         '''
         ix = 0
         count = 0
-        maxCount = len(state._lines) * state._maxLoops
-        while ix < len(self._rules):
+        maxCount = len(state.lines) * state.maxLoops
+        while ix < len(self.rules):
             if count >= maxCount:
-                state._logger.error(
-                    'base.SearchRule.SearchRule.apply(): to many loops: {}'.format(self._maxLoops))
+                state.logger.error(
+                    f'SearchRule.SearchRule.apply(): to many loops: {self.maxLoops}')
                 break
-            item = self._rules[ix]
-            if self._fpTrace is not None:
+            item = self.rules[ix]
+            if self.fpTrace is not None:
                 ixTrace = ix
                 self.trace(ixTrace, False, state)
-            flowControl = self._rules[ix]._flowControl
+            flowControl = self.rules[ix].flowControl
             ix += 1
-            if item._ruleType == '>':
+            if item.ruleType == '>':
                 item.searchForward(state)
-            elif item._ruleType == '<':
+            elif item.ruleType == '<':
                 item.searchBackward(state)
-            elif item._ruleType == '%':
+            elif item.ruleType == '%':
                 # label
                 pass
-            elif item._ruleType == 'anchor' or item._ruleType == '+':
+            elif item.ruleType in ('anchor', '+'):
                 item.reposition(state)
-            elif item._ruleType >= 'p':
+            elif item.ruleType >= 'p':
                 self.applyCommand2(item, state)
             else:
                 ix2 = self.applyCommand1(item, state)
                 if ix2 is not None:
                     ix = ix2
-            if self._fpTrace is not None:
+            if self.fpTrace is not None:
                 self.trace(ixTrace, True, state)
             if flowControl is not None:
-                reaction = flowControl._onSuccess if state._success else flowControl._onError
+                reaction = flowControl.onSuccess if state.success else flowControl.onError
                 if reaction == 'c':
                     pass
                 elif reaction == 's':
                     break
                 elif reaction == 'e':
-                    self._logger.error('{} stopped with error')
+                    self.logger.error('{} stopped with error')
                     break
-                elif reaction in self._labels:
-                    ix = self._labels[reaction] + 1
+                elif reaction in self.labels:
+                    ix = self.labels[reaction] + 1
 
-    def applyCommand1(self, rule, state):
+    def applyCommand1(self, rule: SearchRule.SearchRule, state: SearchRule.ProcessState):
         '''Executes the action named 'a*' to 'p*' (exclusive)
         @param processState: IN/OUT IN: the context to search OUT: the state at the end of applying the rule list
         @return: None: normal processing otherwise: the index of the next rule to process
         '''
         rc = None
-        name = rule._ruleType
+        name = rule.ruleType
         checkPosition = False
         if name == 'add':
             # add-R-m
             # add-R-S
             # add-R D<text>D
-            if rule._param._marker is not None:
-                text = state.textToMarker(rule._param._marker)
-            elif rule._param._register2 is not None:
-                text = state.getRegister(rule._param._register2)
-            elif rule._param._text is not None:
-                text = rule._param.getText(state)
+            if rule.param.marker is not None:
+                text = state.textToMarker(rule.param.marker)
+            elif rule.param.register2 is not None:
+                text = state.getRegister(rule.param.register2)
+            elif rule.param.text is not None:
+                text = rule.param.getText(state)
             else:
-                state._logger.error('add: nothing to do')
+                state.logger.error('add: nothing to do')
                 text = ''
-            state.putToRegister(rule._param._register, text, append=True)
+            state.putToRegister(rule.param.register, text, append=True)
         elif name == 'cut':
             # cut-m
             # cut-R-m
-            if rule._param._register is not None:
-                text = state.textToMarker(rule._param._marker)
-                state.putToRegister(rule._param._register, text)
-            state.deleteToMarker(rule._param._marker)
+            if rule.param.register is not None:
+                text = state.textToMarker(rule.param.marker)
+                state.putToRegister(rule.param.register, text)
+            state.deleteToMarker(rule.param.marker)
         elif name == 'expr':
             # expr-R:"+4"
-            value = base.StringUtils.asInt(
-                state.getRegister(rule._param._register), 0)
-            param = rule._param.getText(state)
-            value2 = base.StringUtils.asInt(param[1:], 0)
-            op = param[0]
-            if op == '+':
+            value = StringUtils.asInt(
+                state.getRegister(rule.param.register), 0)
+            param = rule.param.getText(state)
+            value2 = StringUtils.asInt(param[1:], 0)
+            operator = param[0]
+            if operator == '+':
                 value += value2
-            elif op == '-':
+            elif operator == '-':
                 value -= value2
-            elif op == '*':
+            elif operator == '*':
                 value *= value2
-            elif op == '/':
+            elif operator == '/':
                 if value2 == 0:
-                    state._success = self._logger.error(
+                    state.success = self.logger.error(
                         'division by 0 is not defined')
                 else:
                     value //= value2
-            elif op == '%':
+            elif operator == '%':
                 if value2 == 0:
-                    state._success = self._logger.error(
+                    state.success = self.logger.error(
                         'modulo 0 is not defined')
                 else:
                     value %= value2
-            state._registers[rule._param._register] = str(value)
+            state.registers[rule.param.register] = str(value)
         elif name == 'insert':
             # insert-R
             # insert D<content>D
             text = ''
-            if rule._param._register is not None:
-                text = state.getRegister(rule._param._register)
-            elif rule._param._text is not None:
-                text = rule._param.getText(state)
+            if rule.param.register is not None:
+                text = state.getRegister(rule.param.register)
+            elif rule.param.text is not None:
+                text = rule.param.getText(state)
             state.insertAtCursor(text)
         elif name == 'group':
             # group-G-R
-            state._success = state._lastMatch is not None and state._lastMatch.lastindex <= rule._param._group
-            if state._success:
-                text = '' if state._lastMatch.lastindex < rule._param._group else state._lastMatch.group(
-                    rule._param._group)
-                state.putToRegister(rule._param._register, text)
+            state.success = state.lastMatch is not None and state.lastMatch.lastindex <= rule.param.group
+            if state.success:
+                text = '' if state.lastMatch.lastindex < rule.param.group else state.lastMatch.group(
+                    rule.param.group)
+                state.putToRegister(rule.param.register, text)
         elif name == 'jump':
-            if rule._param._marker is not None:
-                state._cursor.clone(state.getMarker(rule._param._marker))
+            if rule.param.marker is not None:
+                state.cursor.clone(state.getMarker(rule.param.marker))
                 checkPosition = True
             else:
-                rc = self._labels[rule._param._text]
+                rc = self.labels[rule.param.text]
         elif name == 'mark':
-            state.setMarker(rule._param._marker)
+            state.setMarker(rule.param.marker)
         else:
-            state._logger.error('applyCommand1: unknown command')
+            state.logger.error('applyCommand1: unknown command')
         if checkPosition:
-            state._success = state.inRange()
+            state.success = state.inRange()
         return rc
 
-    def applyCommand2(self, rule, state):
+    def applyCommand2(self, rule: SearchRule.SearchRule, state: SearchRule.ProcessState):
         '''Executes the actions named 'p*' to 'z*' (inclusive)
         @param processState: IN/OUT IN: the context to search OUT: the state at the end of applying the rule list
         '''
-        name = rule._ruleType
+        name = rule.ruleType
         if name == 'print':
-            state._success = True
-            if rule._param._register is not None:
-                print(state.getRegister(rule._param._register))
-            elif rule._param._marker is not None:
-                print(state.textToMarker(rule._param._marker))
-            elif rule._param._text is not None:
-                print(rule._param.getText(state))
+            state.success = True
+            if rule.param.register is not None:
+                print(state.getRegister(rule.param.register))
+            elif rule.param.marker is not None:
+                print(state.textToMarker(rule.param.marker))
+            elif rule.param.text is not None:
+                print(rule.param.getText(state))
         elif name == 'replace':
-            param = rule._param
-            if param._register is not None:
-                replaced, state._lastHits = re.subn(
-                    param._text, param._text2, state.getRegister(param._register))
-                state._registers[param._register] = replaced
-            elif param._marker is not None:
-                SearchRuleList.applyReplaceRegion(state._cursor, state.getMarker(param._marker),
-                                            re.compile(param._text), param._text2, state)
+            param = rule.param
+            if param.register is not None:
+                replaced, state.lastHits = re.subn(
+                    param.text, param.text2, state.getRegister(param.register))
+                state.registers[param.register] = replaced
+            elif param.marker is not None:
+                SearchRuleList.applyReplaceRegion(state.cursor, state.getMarker(param.marker),
+                                                  re.compile(param.text), param.text2, state)
             else:
                 # replace in the current line:
-                line = state._lines[state._cursor._line]
-                replaced, state._lastHits = re.subn(
-                    param._text, param._text2, line)
+                line = state.lines[state.cursor.line]
+                replaced, state.lastHits = re.subn(
+                    param.text, param.text2, line)
                 if line != replaced:
-                    state._hasChanged = True
-                    state._lines[state._cursor._line] = replaced
+                    state.hasChanged = True
+                    state.lines[state.cursor.line] = replaced
         elif name == 'set':
-            if rule._param._marker is not None:
-                text = state.textToMarker(rule._param._marker)
-            elif rule._param._register2 is not None:
-                text = state.textToMarker(rule._param._marker)
-            elif rule._param._text is not None:
-                text = rule._param.getText(state)
+            if rule.param.marker is not None:
+                text = state.textToMarker(rule.param.marker)
+            elif rule.param.register2 is not None:
+                text = state.textToMarker(rule.param.marker)
+            elif rule.param.text is not None:
+                text = rule.param.getText(state)
             else:
-                state._logger.error('set: nothing to do')
+                state.logger.error('set: nothing to do')
                 text = ''
-            state.putToRegister(rule._param._register, text)
+            state.putToRegister(rule.param.register, text)
         elif name == 'state':
-            name = rule._param._text
+            name = rule.param.text
             if name == 'row':
-                value = state._cursor._line + 1
+                value = state.cursor.line + 1
             elif name == 'col':
-                value = state._cursor._col + 1
+                value = state.cursor.col + 1
             elif name == 'rows':
-                value = len(state._lines)
+                value = len(state.lines)
             elif name.startswith('size-'):
                 value = len(state.getRegister(name[5]))
             elif name.startswith('rows-'):
                 value = state.getRegister(name[5]).count('\n')
             elif name == 'hits':
-                value = state._lastHits
+                value = state.lastHits
             else:
                 value = '?'
-            state._registers[rule._param._register] = str(value)
+            state.registers[rule.param.register] = str(value)
         elif name == 'swap':
-            marker = state.getMarker(rule._param._marker)
+            marker = state.getMarker(rule.param.marker)
             if marker is None:
-                state._success = False
-                state._logger.error(
-                    'swap: marker {} is not defined'.format(rule._param._marker))
+                state.success = False
+                state.logger.error(
+                    f'swap: marker {rule.param.marker} is not defined')
             else:
-                state._tempRange.clone(state._cursor)
-                state._cursor.clone(marker)
-                marker.clone(state._tempRange)
-                state._success = state.inRange()
+                state.tempRange.clone(state.cursor)
+                state.cursor.clone(marker)
+                marker.clone(state.tempRange)
+                state.success = state.inRange()
         else:
-            self._logger.error(
-                'unknown command {} in {}'.format(name, rule._ruleType))
+            self.logger.error(
+                f'unknown command {name} in {rule.ruleType}')
 
     @staticmethod
-    def applyReplaceRegion(start, end, what, replacement, state):
+    def applyReplaceRegion(start, end, what, replacement: str, state: SearchRule.ProcessState):
         '''Replaces inside the region.
         @param start: first bound of the region
         @param end: second bound of the region
         @param what: the regular expression to search
         @param replacement: the string to replace
-        @param state: a base.SearchRule.ProcessState instance
+        @param state: a SearchRule.ProcessState instance
         '''
         if start.compare(end) > 0:
             start, end = end, start
-        state._lastHits = 0
-        if start._line == end._line:
-            value = state._lines[start._line][start._col:end._col]
+        state.lastHits = 0
+        if start.line == end.line:
+            value = state.lines[start.line][start.col:end.col]
             value2, hits = what.subn(replacement, value)
             if value != value2:
-                state._lastHits += hits
-                state._hasChanged = True
-                state._lines[start._line] = state._lines[start._line][0:start._col] + \
-                    value2 + state._lines[end._line][end._col:]
+                state.lastHits += hits
+                state.hasChanged = True
+                state.lines[start.line] = state.lines[start.line][0:start.col] + \
+                    value2 + state.lines[end.line][end.col:]
         else:
-            startIx = start._line
-            if start._col > 0:
-                value = state._lines[start._line][start._col:]
+            startIx = start.line
+            if start.col > 0:
+                value = state.lines[start.line][start.col:]
                 value2, hits = what.subn(replacement, value)
                 if value != value2:
-                    state._lastHits += hits
-                    state._hasChanged = True
-                    state._lines[start._line] = state._lines[start._line][0:start._col] + value2
+                    state.lastHits += hits
+                    state.hasChanged = True
+                    state.lines[start.line] = state.lines[start.line][0:start.col] + value2
                 startIx += 1
-            for ix in range(startIx, end._line):
-                value = state._lines[ix]
+            for ix in range(startIx, end.line):
+                value = state.lines[ix]
                 value2, hits = what.subn(replacement, value)
                 if value != value2:
-                    state._lastHits += hits
-                    state._hasChanged = True
-                    state._lines[ix] = value2
-            if end._col > 0:
-                value = state._lines[end._line][0:end._col]
+                    state.lastHits += hits
+                    state.hasChanged = True
+                    state.lines[ix] = value2
+            if end.col > 0:
+                value = state.lines[end.line][0:end.col]
                 value2, hits = what.subn(replacement, value)
                 if value != value2:
-                    state._lastHits += hits
-                    state._hasChanged = True
-                    state._lines[end._line] = value2 + \
-                        state._lines[end._line][end._col:]
+                    state.lastHits += hits
+                    state.hasChanged = True
+                    state.lines[end.line] = value2 + \
+                        state.lines[end.line][end.col:]
 
     def check(self):
         '''Tests the compiled rules, e.g. existence of labels.
         @return: None OK otherwise: the error message
         '''
-        self._labels = {}
+        self.labels = {}
         ix = -1
-        for rule in self._rules:
+        for rule in self.rules:
             ix += 1
-            if rule._ruleType == '%':
-                self._labels[rule._param] = ix
-        for rule in self._rules:
-            if rule._flowControl is not None:
-                label = rule._flowControl._onSuccess
-                if label.startswith('%') and label not in self._labels:
-                    self._logger.error(
-                        'unknown label (on success) {}'.format(label))
-                    self._errorCount += 1
-                label = rule._flowControl._onError
-                if label.startswith('%') and label not in self._labels:
-                    self._logger.error(
-                        'unknown label (on error): {}'.format(label))
-                    self._errorCount += 1
-                if rule._ruleType == 'jump' and rule._param._text is not None and rule._param._text not in self._labels:
-                    self._logger.error(
-                        'unknown jump target: {}'.format(rule._text))
-                    self._errorCount += 1
-        rc = self._errorCount == 0
+            if rule.ruleType == '%':
+                self.labels[rule.param] = ix
+        for rule in self.rules:
+            if rule.flowControl is not None:
+                label = rule.flowControl.onSuccess
+                if label.startswith('%') and label not in self.labels:
+                    self.logger.error(
+                        f'unknown label (on success) {label}')
+                    self.errorCount += 1
+                label = rule.flowControl.onError
+                if label.startswith('%') and label not in self.labels:
+                    self.logger.error(
+                        f'unknown label (on error): {label}')
+                    self.errorCount += 1
+                if rule.ruleType == 'jump' and rule.param.text is not None and rule.param.text not in self.labels:
+                    self.logger.error(
+                        f'unknown jump target: {rule.text}')
+                    self.errorCount += 1
+        rc = self.errorCount == 0
         return rc
 
     @staticmethod
@@ -473,7 +475,7 @@ Examples:
     stop without error if not found. if found display "eve found but not jonny"
 >/Address:/ error:error >/EMail:/s
     if "Address" is not found, the result is "not found"
-    otherwise if "EMail" is found behind, the new base.SearchRule.Position is at "Email:" if not the new position is "Address"
+    otherwise if "EMail" is found behind, the new SearchRule.Position is at "Email:" if not the new position is "Address"
 10:0 error:%missingLines% >/Name:\s+/ label-n >/[A-Za-z ]+/ print-N-n success:stop;%missingLines% print:"less than 10 lines"
     searches for a name starting in line 10. Prints an informative message if line 10 does not exist
 10:0 >/Firstname:\s+/e label-f >/[A-Za-z ]+/e store-F-n
@@ -493,10 +495,10 @@ print:"Full name: " print-F print:" " print-N
         rule = match.group(0)
         parts = rule.split(';')
         name = parts[0].strip()
-        rule = base.SearchRule.SearchRule('anchor', name)
+        rule = SearchRule.SearchRule('anchor', name)
         return rule
 
-    def parseCommand(self, rule):
+    def parseCommand(self, rule: SearchRule.SearchRule):
         '''Parses a command.
         A command is a rule except searching or repositioning:
         @see SearchRuleList.describe() for details.
@@ -526,7 +528,7 @@ print:"Full name: " print-F print:" " print-N
                     if rest.startswith('e='):
                         esc = rest[2]
             return (text, esc)
-        match = SearchRuleList.__reCommand.match(rule)
+        match = SearchRuleList.reCommand.match(rule)
         success = True
         if match is None:
             success = self.parseError('missing command name')
@@ -541,13 +543,13 @@ print:"Full name: " print-F print:" " print-N
                 # add-R-S
                 # add-R D<text>D
                 if isRegister(var2) and text is None:
-                    self.appendCommand(name, base.SearchRule.CommandData(
+                    self.appendCommand(name, SearchRule.CommandData(
                         register=var1, register2=var2))
                 elif isMarker(var2) and text is None:
-                    self.appendCommand(name, base.SearchRule.CommandData(
+                    self.appendCommand(name, SearchRule.CommandData(
                         register=var1, marker=var2))
                 elif var2 is None and text is not None:
-                    self.appendCommand(name, base.SearchRule.CommandData(
+                    self.appendCommand(name, SearchRule.CommandData(
                         register=var1, text=text, escChar=esc))
                 else:
                     success = self.parseError(
@@ -556,12 +558,13 @@ print:"Full name: " print-F print:" " print-N
                 # cut-m
                 # cut-R-m
                 if isMarker(var1) and var2 is None and text is None:
-                    self.appendCommand(name, base.SearchRule.CommandData(marker=var1))
+                    self.appendCommand(
+                        name, SearchRule.CommandData(marker=var1))
                 elif isRegister(var1) and isMarker(var2) and text is None:
-                    self.appendCommand(name, base.SearchRule.CommandData(
+                    self.appendCommand(name, SearchRule.CommandData(
                         marker=var2, register=var1))
                 elif isRegister(var2) and isMarker(var1) and text is None:
-                    self.appendCommand(name, base.SearchRule.CommandData(
+                    self.appendCommand(name, SearchRule.CommandData(
                         marker=var1, register=var2))
                 else:
                     success = self.parseError(
@@ -573,12 +576,12 @@ print:"Full name: " print-F print:" " print-N
                 #        '+', '-', '*', '/', '%'
                 # expr-R:D<operator><constant>D
                 #    calculate R = R <operator> <constant>
-                matcher = SearchRuleList.__reRuleExprParams.match(text)
+                matcher = SearchRuleList.reRuleExprParams.match(text)
                 if matcher is None:
                     success = self.parseError(
-                        '<operator><operand> expected, not "{}"'.format(text))
+                        f'<operator><operand> expected, not "{text}"')
                 elif isRegister(var1) and var2 is None and text is not None:
-                    self.appendCommand(name, base.SearchRule.CommandData(
+                    self.appendCommand(name, SearchRule.CommandData(
                         register=var1, text=text, escChar='$'))
                 else:
                     success = self.parseError(
@@ -586,7 +589,7 @@ print:"Full name: " print-F print:" " print-N
             elif name == 'group':
                 # group-G-R
                 if isGroup(var1) and isRegister(var2) and text is None:
-                    self.appendCommand(name, base.SearchRule.CommandData(
+                    self.appendCommand(name, SearchRule.CommandData(
                         group=int(var1), register=var2))
                 else:
                     success = self.parseError(
@@ -595,10 +598,11 @@ print:"Full name: " print-F print:" " print-N
                 # insert-R
                 # insert D<content>D
                 if isRegister(var1) and var2 is None and text is None:
-                    self.appendCommand(name, base.SearchRule.CommandData(register=var1))
+                    self.appendCommand(
+                        name, SearchRule.CommandData(register=var1))
                 elif var1 is None and var2 is None:
                     self.appendCommand(
-                        name, base.SearchRule.CommandData(text=text, escChar=esc))
+                        name, SearchRule.CommandData(text=text, escChar=esc))
                 else:
                     success = self.parseError(
                         'invalid syntax: insert-R or insert DtextD expected')
@@ -606,16 +610,19 @@ print:"Full name: " print-F print:" " print-N
                 # jump-m
                 # jump-L
                 if isMarker(var1) and var2 is None:
-                    self.appendCommand(name, base.SearchRule.CommandData(marker=var1))
+                    self.appendCommand(
+                        name, SearchRule.CommandData(marker=var1))
                 elif var1 is None and params != '' and params.startswith(':%') and params[-1] == '%':
-                    self.appendCommand(name, base.SearchRule.CommandData(text=params[1:]))
+                    self.appendCommand(
+                        name, SearchRule.CommandData(text=params[1:]))
                 else:
                     success = self.parseError(
                         'invalid syntax: jump-m or jump:<label> expected')
             elif name == 'mark':
                 # mark-m
                 if isMarker(var1) and var2 is None:
-                    self.appendCommand(name, base.SearchRule.CommandData(marker=var1))
+                    self.appendCommand(
+                        name, SearchRule.CommandData(marker=var1))
                 else:
                     success = self.parseError(
                         'invalid syntax: mark-m expected')
@@ -624,12 +631,14 @@ print:"Full name: " print-F print:" " print-N
                 # print-R
                 # print D<text>D display text
                 if isMarker(var1) and var2 is None and text is None:
-                    self.appendCommand(name, base.SearchRule.CommandData(marker=var1))
+                    self.appendCommand(
+                        name, SearchRule.CommandData(marker=var1))
                 elif isRegister(var1) and var2 is None and text is None:
-                    self.appendCommand(name, base.SearchRule.CommandData(register=var1))
+                    self.appendCommand(
+                        name, SearchRule.CommandData(register=var1))
                 elif var1 is None and var2 is None and text is not None:
                     self.appendCommand(
-                        name, base.SearchRule.CommandData(text=text, escChar=esc))
+                        name, SearchRule.CommandData(text=text, escChar=esc))
                 else:
                     success = self.parseError(
                         'invalid syntax: print-m or print-R or print DtextD expected"')
@@ -645,10 +654,10 @@ print:"Full name: " print-F print:" " print-N
                         what = params[1:ix1]
                         replacement = params[ix1 + 1:ix2]
                 elif isMarker(var1) and var2 is None and what is not None:
-                    self.appendCommand(name, base.SearchRule.CommandData(
+                    self.appendCommand(name, SearchRule.CommandData(
                         marker=var1, text=what, text2=replacement))
                 elif isRegister(var1) and var2 is None:
-                    self.appendCommand(name, base.SearchRule.CommandData(
+                    self.appendCommand(name, SearchRule.CommandData(
                         register=var1, text=what, text2=replacement))
                 else:
                     success = self.parseError(
@@ -657,10 +666,10 @@ print:"Full name: " print-F print:" " print-N
                 # set-R-m
                 # set-R D<text>D
                 if isRegister(var1) and isMarker(var2) and text is None:
-                    self.appendCommand(name, base.SearchRule.CommandData(
+                    self.appendCommand(name, SearchRule.CommandData(
                         register=var1, marker=var2))
                 elif isRegister(var1) and var2 is None and text is not None:
-                    self.appendCommand(name, base.SearchRule.CommandData(
+                    self.appendCommand(name, SearchRule.CommandData(
                         register=var1, text=text, escChar=esc))
                 else:
                     success = self.parseError(
@@ -668,33 +677,33 @@ print:"Full name: " print-F print:" " print-N
             elif name == 'swap':
                 # swap-m
                 if isMarker(var1) and var2 is None and text is None:
-                    self.appendCommand(name, base.SearchRule.CommandData(marker=var1))
+                    self.appendCommand(
+                        name, SearchRule.CommandData(marker=var1))
                 else:
                     success = self.parseError(
                         'invalid syntax: swap-m expected')
             elif name == 'state':
                 # state-R:D<variable>D
-                var3 = None if text is None or SearchRuleList.__reRuleStateParam.match(
+                var3 = None if text is None or SearchRuleList.reRuleStateParam.match(
                     text) is None else text
                 if isRegister(var1) and var2 is None and var3 is not None:
-                    self.appendCommand(name, base.SearchRule.CommandData(
+                    self.appendCommand(name, SearchRule.CommandData(
                         register=var1, text=var3))
                 else:
                     success = self.parseError(
                         'invalid syntax: state-R:"{row|col|rows|size-R|rows-R}" expected')
             else:
                 success = self.parseError(
-                    'unknown name {} in {}'.format(name, rule))
+                    f'unknown name {name} in {rule}')
         return success
 
-    def parseError(self, message):
+    def parseError(self, message: str):
         '''Logs a parser error.
         @param message: the error message
         @return: False (for chaining)
         '''
-        self._logger.error('{}: {} rule: {}'.format(
-            self._col, message, self._currentRule))
-        self._errorCount += 1
+        self.logger.error(f'{self.col}: {message} rule: {self.currentRule}')
+        self.errorCount += 1
         return False
 
     def parseRules(self, rules):
@@ -703,7 +712,7 @@ print:"Full name: " print-F print:" " print-N
             Example: '>/logfile:/ -2:0 bol':
             search forwards "logfile:" go backward 2 line 0 column, go to begin of line
         '''
-        self._col = 0
+        self.col = 0
         rules = rules.lstrip('\t\n\r ;')
         while rules != '':
             currentRule = None
@@ -713,59 +722,59 @@ print:"Full name: " print-F print:" " print-N
                 lengthCommand = self.parseRuleReplace(rules)
                 ready = True
             if not ready:
-                match = SearchRuleList.__reRule.match(rules)
+                match = SearchRuleList.reRule.match(rules)
                 if match is None:
                     break
+                singleRule = self.currentRule = match.group(0)
+                lengthCommand = len(singleRule)
+                ruleType = singleRule[0]
+                if ruleType in ('<', '>', 'F', 'B'):
+                    sep = singleRule[1]
+                    ixEnd = singleRule.find(sep, 2)
+                    param = SearchData()
+                    msg = param.setData(
+                        singleRule[2:ixEnd], singleRule[ixEnd + 1:])
+                    if msg is not None:
+                        self.parseError(msg)
+                    if ruleType == 'F':
+                        ruleType = '>'
+                    elif ruleType == 'B':
+                        ruleType = '<'
+                    currentRule = SearchRule.SearchRule(ruleType, param)
+                elif ruleType == '%':
+                    # label:
+                    currentRule = SearchRule.SearchRule(
+                        ruleType, singleRule[0:-1])
+                elif '0' <= ruleType <= '9':
+                    currentRule = SearchRule.SearchRule(
+                        '+', [int(match.group(1)), int(match.group(2)), ':'])
+                elif ruleType in ('+', '-'):
+                    # reposition:
+                    factor = 1 if ruleType == '+' else -1
+                    currentRule = SearchRule.SearchRule('+', [factor * int(match.group(1)),
+                                                              factor * int(match.group(2)), '+'])
+                elif singleRule.startswith('bo') or singleRule.startswith('eo'):
+                    currentRule = SearchRuleList.parseAnchor(match)
                 else:
-                    singleRule = self._currentRule = match.group(0)
-                    lengthCommand = len(singleRule)
-                    ruleType = singleRule[0]
-                    if ruleType in ('<', '>', 'F', 'B'):
-                        sep = singleRule[1]
-                        ixEnd = singleRule.find(sep, 2)
-                        param = SearchData()
-                        msg = param.setData(
-                            singleRule[2:ixEnd], singleRule[ixEnd + 1:])
-                        if msg is not None:
-                            self.parseError(msg)
-                        if ruleType == 'F':
-                            ruleType = '>'
-                        elif ruleType == 'B':
-                            ruleType = '<'
-                        currentRule = base.SearchRule.SearchRule(ruleType, param)
-                    elif ruleType == '%':
-                        # label:
-                        currentRule = base.SearchRule.SearchRule(ruleType, singleRule[0:-1])
-                    elif '0' <= ruleType <= '9':
-                        currentRule = base.SearchRule.SearchRule(
-                            '+', [int(match.group(1)), int(match.group(2)), ':'])
-                    elif ruleType in ('+', '-'):
-                        # reposition:
-                        factor = 1 if ruleType == '+' else -1
-                        currentRule = base.SearchRule.SearchRule('+', [factor * int(match.group(1)),
-                                                 factor * int(match.group(2)), '+'])
-                    elif singleRule.startswith('bo') or singleRule.startswith('eo'):
-                        currentRule = SearchRuleList.parseAnchor(match)
-                    else:
-                        self.parseCommand(singleRule)
+                    self.parseCommand(singleRule)
             if currentRule is not None:
-                self._rules.append(currentRule)
+                self.rules.append(currentRule)
             if lengthCommand == 0:
                 break
-            self._col += lengthCommand
+            self.col += lengthCommand
             rules = rules[lengthCommand:].lstrip('\t\n\r ;')
-            matcher = SearchRuleList.__reFlowControl.match(rules)
+            matcher = SearchRuleList.reFlowControl.match(rules)
             if matcher is not None:
                 controls = matcher.group(0)
-                if self._rules:
-                    self._rules[len(self._rules) -
-                                1]._flowControl.setControl(controls)
+                if self.rules:
+                    self.rules[len(self.rules) -
+                               1].flowControl.setControl(controls)
                 length = len(controls)
-                self._col += length
+                self.col += length
                 rules = rules[length:].lstrip('\t\n\r ;')
         if rules != '':
             self.parseError('not recognized input: ' + rules)
-        rc = self._errorCount == 0
+        rc = self.errorCount == 0
         return rc
 
     def parseRuleReplace(self, rules):
@@ -776,10 +785,10 @@ print:"Full name: " print-F print:" " print-N
         rc = len('replace')
         # .......A.........  A..1.....12..2..3..3..4...4
         # replace(?:-[a-zA-Z])?:([^\s])(.+)\1(.*)\1(e=.)?')
-        matcher = SearchRuleList.__reRuleReplace.match(rules)
+        matcher = SearchRuleList.reRuleReplace.match(rules)
         if matcher is None:
             self.parseError('wrong syntax for replace: ' +
-                            base.StringUtils.limitLength(rules, 40))
+                            StringUtils.limitLength(rules, 40))
         else:
             name = None if rules[7] != '-' else rules[8]
             register = None if name is None or name > 'Z' else name
@@ -788,47 +797,49 @@ print:"Full name: " print-F print:" " print-N
             replacement = matcher.group(3)
             options = matcher.group(4)
             escChar = None if options is None or options == '' else options[2]
-            param = base.SearchRule.CommandData(register, escChar, marker, what, replacement)
-            rule = base.SearchRule.SearchRule('replace', param)
-            self._rules.append(rule)
+            param = SearchRule.CommandData(
+                register, escChar, marker, what, replacement)
+            rule = SearchRule.SearchRule('replace', param)
+            self.rules.append(rule)
             rc = len(matcher.group(0))
         return rc
 
-    def startTrace(self, filename, append=False):
+    def startTrace(self, filename: str, append: bool=False):
         '''Starts tracing the rule execution.
         @param filename: the name of the trace file
         @param append: True: the trace will be appended
         '''
-        self._fpTrace = open(filename, 'a' if append else 'w')
-        self._fpTrace.write('= start\n')
+        # pylint: disable-next=consider-using-with
+        self.fpTrace = open(filename, 'a' if append else 'w', encoding='utf-8')
+        self.fpTrace.write('= start\n')
 
     def stopTrace(self):
         '''Stops tracing the rule execution.
         @param filename: the name of the trace file
         @param append: True: the trace will be appended
         '''
-        if self._fpTrace is not None:
-            self._fpTrace.close()
-            self._fpTrace = None
+        if self.fpTrace is not None:
+            self.fpTrace.close()
+            self.fpTrace = None
 
-    def trace(self, index, after, state):
+    def trace(self, index: int, after: bool, state: SearchRule.ProcessState):
         '''Traces the state applying the current rule.
         @param index: index in _rules
         @param after: True: called after processing the rule
-        @param state: the base.SearchRule.ProcessState instance
+        @param state: the SearchRule.ProcessState instance
         '''
-        rule = self._rules[index]
+        rule = self.rules[index]
         rc = rule.state(after, state)
         if after:
-            success = 'success' if state._success else 'error'
-            self._fpTrace.write('{:03d}: {} {}\n    {}\n'.format(
-                index, success, rule.toString(), rc))
+            success = 'success' if state.success else 'error'
+            self.fpTrace.write(f'{index:03d}: {success} {rule.toString()}\n    {rc}\n')
 
 
+# pylint: disable-next=too-few-public-methods
 class SearchData:
     '''Data for seaching (forward and backward)
     '''
-    __reRange = re.compile(r':?(\d+)')
+    reRange = re.compile(r':?(\d+)')
 
     def __init__(self):
         '''Constructor:
@@ -836,36 +847,36 @@ class SearchData:
         @param useEnd: True: the cursor is set behind the found string
             False: the cursor is set at the beginning of the found string
         '''
-        self._ignoreCase = None
-        self._useEnd = None
-        self._rangeColumns = None
-        self._rangeLines = None
-        self._regExpr = None
+        self.ignoreCase = None
+        self.useEnd = None
+        self.rangeColumns = None
+        self.rangeLines = None
+        self.regExpr = None
 
-    def setData(self, string, options):
+    def setData(self, string: str, options: str):
         '''Sets the variables by inspecting the string and the options.
         @param string: the search string (regular expression)
         @param options: the search options, e.g. 'i' for ignore case
         @return: None: success otherwise: an error message
         '''
         rc = None
-        match = SearchData.__reRange.match(options)
+        match = SearchData.reRange.match(options)
         if match is not None:
             if options.startswith(':'):
-                self._rangeColumns = int(match.group(1))
+                self.rangeColumns = int(match.group(1))
             else:
-                self._rangeLines = int(match.group(1))
+                self.rangeLines = int(match.group(1))
             options = options[len(match.group(0)):]
         options = options.rstrip()
         while options != '':
             if options.startswith('i'):
-                self._ignoreCase = True
+                self.ignoreCase = True
             elif options.startswith('e'):
-                self._useEnd = True
+                self.useEnd = True
             else:
                 rc = 'unknown search option: ' + options[0]
                 break
             options = options[1:].rstrip()
-        self._regExpr = re.compile(
-            string, base.Const.IGNORE_CASE if self._ignoreCase else 0)
+        self.regExpr = re.compile(
+            string, Const.IGNORE_CASE if self.ignoreCase else 0)
         return rc

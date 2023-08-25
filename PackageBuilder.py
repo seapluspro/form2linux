@@ -11,13 +11,15 @@ import subprocess
 import shutil
 import json
 import re
-import text.jsonutils as jsonutils
+from base import StringUtils
+from text import JsonUtils
 from Builder import Builder, CLIError
-import base.StringUtils
+
 
 class PackageBuilder (Builder):
     '''Manages the "package" commands.
     '''
+
     def __init__(self, verbose: bool, dry: bool):
         '''Constructor.
         @param verbose: <em>True</em>: info messages will be displayed
@@ -74,13 +76,12 @@ class PackageBuilder (Builder):
         '''
         name = f'{self._baseDirectory}/DEBIAN/control'
         depends = ''
-        for item in self._depends:
+        for item, version in self._depends.items():
             if depends == '':
                 depends = 'Depends: '
             else:
                 depends += ', '
             depends += item
-            version = self._depends[item]
             if version != '':
                 depends += f' ({version})'
         if depends != '':
@@ -92,7 +93,7 @@ class PackageBuilder (Builder):
         for note in self._notes:
             desc += f' {note}\n'
         replaces = '' if self._replaces == '' else f'\nReplaces: {self._replaces}'
-        with open(name, 'w') as fp:
+        with open(name, 'w', encoding='utf-8') as fp:
             fp.write(f'''Package: {self._package}
 Version: {self._version}
 Architecture: {self._architecture}{replaces}
@@ -113,10 +114,11 @@ Description: {desc}''')
     def buildPostInstall(self):
         '''Creates the script file DEBIAN/postinst.
         '''
-        sumLength = (0 if self._postInstall == '' else 1) + len(self._installedDirs) + len(self._links)
+        sumLength = (0 if self._postInstall == '' else 1) + \
+            len(self._installedDirs) + len(self._links)
         if sumLength > 0:
             name = f'{self._baseDirectory}/DEBIAN/postinst'
-            with open(name, 'w') as fp:
+            with open(name, 'w', encoding='utf-8') as fp:
                 fp.write('''#! /bin/bash
 set -e
 PATH=/usr/bin:/bin:/usr/sbin:/sbin
@@ -127,8 +129,7 @@ if [ "$1" = configure ]; then
                         if item not in self._standardDirectories:
                             fp.write(f'test -d /{item} || mkdir -p /{item}\n')
                 if len(self._links) > 0:
-                    for item in self._links:
-                        target = self._links[item]
+                    for item, target in self._links.items():
                         if target.endswith('/'):
                             target += os.path.basename(item)
                         partsTarget = target.split('/')
@@ -137,13 +138,16 @@ if [ "$1" = configure ]; then
                         while len(partsTarget) > 0 and len(partsSource) > 0 and partsTarget[0] == partsSource[0]:
                             del partsTarget[0]
                             del partsSource[0]
-                        relLink = '../' * (len(partsTarget) - 1) + '/'.join(partsSource)
-                        fp.write(f'test -L /{target} && rm -f /{target}\nln -s {relLink} /{target}\n')
+                        relLink = '../' * \
+                            (len(partsTarget) - 1) + '/'.join(partsSource)
+                        fp.write(
+                            f'test -L /{target} && rm -f /{target}\nln -s {relLink} /{target}\n')
                 if self._postInstall is not None and self._postInstall != '':
-                    with open(self._postInstall, 'r') as fp2:
+                    with open(self._postInstall, 'r', encoding='utf-8') as fp2:
                         contents = fp2.read()
                         lines = 1 + contents.count('\n')
-                        self.info(f'read: {self._postInstall} with {lines} line(s)')
+                        self.info(
+                            f'read: {self._postInstall} with {lines} line(s)')
                     fp.write(contents)
                 fp.write('fi\n')
                 fp.write('exit 0\n')
@@ -154,30 +158,31 @@ if [ "$1" = configure ]; then
     def buildPostRm(self):
         '''Creates the script file DEBIAN/postrm.
         '''
-        sumLength = (0 if self._postRemove == '' else 1) + len(self._installedDirs) + len(self._links)
+        sumLength = (0 if self._postRemove == '' else 1) + \
+            len(self._installedDirs) + len(self._links)
         if sumLength > 0:
             name = f'{self._baseDirectory}/DEBIAN/postrm'
-            with open(name, 'w') as fp:
+            with open(name, 'w', encoding='utf-8') as fp:
                 fp.write('''#! /bin/bash
 set -e
 PATH=/usr/bin:/bin:/usr/sbin:/sbin
 ''')
                 if self._postRemove is not None and self._postRemove != '':
-                    with open(self._postRemove, 'r') as fp2:
+                    with open(self._postRemove, 'r', encoding='utf-8') as fp2:
                         contents = fp2.read()
                         lines = 1 + contents.count('\n')
-                        self.info(f'read: {self._postRemove} with {lines} line(s)')
+                        self.info(
+                            f'read: {self._postRemove} with {lines} line(s)')
                     fp.write(contents)
                 if len(self._links) > 0:
-                    for item in self._links:
-                        target = self._links[item]
+                    for item, target in self._links.items():
                         if target.endswith('/'):
                             target += os.path.basename(item)
                         fp.write(f'test -L /{target} && rm -f /{target}\n')
                 if len(self._installedDirs) > 0:
-                    sorted = self._installedDirs[:]
-                    sorted.sort(key=lambda x: -len(x))
-                    for item in sorted:
+                    sortedDirs = self._installedDirs[:]
+                    sortedDirs.sort(key=lambda x: -len(x))
+                    for item in sortedDirs:
                         if item not in self._standardDirectories:
                             fp.write(f'test -d /{item} && rmdir /{item}\n')
                 fp.write('exit 0\n')
@@ -195,15 +200,17 @@ PATH=/usr/bin:/bin:/usr/sbin:/sbin
         @param configuration: the Json form with the package definition
         '''
         self.log(f'current directory: {os.getcwd()}')
-        with open(configuration, 'r') as fp:
+        with open(configuration, 'r', encoding='utf-8') as fp:
             data = fp.read()
             self._root = root = json.loads(data)
             path = 'Project:m Directories:a Files:m Links:m PostInstall:s PostRemove:s'
-            jsonutils.checkJsonMapAndRaise(root, path, True, 'Variables:m')
+            JsonUtils.checkJsonMapAndRaise(
+                root, path, True, 'Variables:m Comment:s')
             project = root['Project']
             path = 'Package:s Version:s Architecture:s Provides:s Replaces:s Suggests:a Maintainer:s ' + \
                 'Depends:m Homepage:s Description:s Notes:a'
-            jsonutils.checkJsonMapAndRaise(project, path, True, 'Variables')
+            JsonUtils.checkJsonMapAndRaise(
+                project, path, True, 'Comment:s Variables:m')
             variables = root['Variables']
             for name in variables:
                 self.setVariable(name, variables[name])
@@ -216,23 +223,27 @@ PATH=/usr/bin:/bin:/usr/sbin:/sbin
                 raise CLIError(f'wrong Project.Version: {self._version}')
             self._architecture = self.valueOf('Project Architecture')
             if not re.match(r'^(amd64|arm64|all)$', self._architecture):
-                raise CLIError(f'wrong Project.Architecture: {self._architecture}')
+                raise CLIError(
+                    f'wrong Project.Architecture: {self._architecture}')
             self._maintainer = self.valueOf('Project Maintainer')
             self._postInstall = self.valueOf('PostInstall')
             if self._postInstall != '' and not os.path.exists(self._postInstall):
-                raise CLIError(f'PostInstall file not found: {self._postInstall}')
+                raise CLIError(
+                    f'PostInstall file not found: {self._postInstall}')
             self._postRemove = self.valueOf('PostRemove')
             if self._postRemove != '' and not os.path.exists(self._postRemove):
-                raise CLIError(f'PostRemove file not found: {self._postRemove}')
+                raise CLIError(
+                    f'PostRemove file not found: {self._postRemove}')
             depends = self.valueOf('Project Depends', 'm')
             for key in depends:
                 value = depends[key]
                 if value != '':
                     if not re.match(r'^[<>=]* ?\d+\.\d+', value):
-                        raise CLIError(f'wrong Project.Dependency: {key}: {value}')
+                        raise CLIError(
+                            f'wrong Project.Dependency: {key}: {value}')
                 self._depends[key] = value
             self._provides = self.valueOf('Project Provides')
-            if self._provides == '' or self._provides == '*':
+            if self._provides in ('', '*'):
                 self._provides = self._package
             self._replaces = self.valueOf('Project Replaces')
             self._homepage = self.valueOf('Project Homepage')
@@ -309,8 +320,7 @@ PATH=/usr/bin:/bin:/usr/sbin:/sbin
         if filename is None:
             self.log(message)
         else:
-            base.StringUtils.toFile(filename, message)
-
+            StringUtils.toFile(filename, message)
 
     def findFiles(self, base):
         '''Builds the statistics: calculates the size of the installed files.
@@ -327,5 +337,3 @@ PATH=/usr/bin:/bin:/usr/sbin:/sbin
                     self.findFiles(full)
             elif base != self._baseDirectory:
                 self._sizeFiles += os.path.getsize(full)
-
-

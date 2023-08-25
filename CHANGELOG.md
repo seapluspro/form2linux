@@ -1,6 +1,16 @@
 # Changelog
 
-# [0.2.1] - 2023-08-24
+# [0.3.1] - 2023-08-25
+
+## Added
+- mode setup: system-info, example-system-info
+- all forms: optional field "Comment" in all maps
+- Builder::runProgram(): new parameter outputFile
+ 
+## Changed
+- Refactoring: pylint warnings reduced (all modules)
+ 
+ # [0.2.1] - 2023-08-24
 
 ## Added
 - new mode setup

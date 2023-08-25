@@ -13,24 +13,26 @@ import stat
 import pwd
 import grp
 
-import base.StringUtils
+from base import Const
+from base import StringUtils
+from base import Logger
 
 
-def diskFree(verboseLevel=0, logger=None):
+def diskFree(verboseLevel: int=0, logger: Logger.Logger=None):
     '''Returns an info about the mounted filesystems.
     @return: a list of info entries: entry: [mountPath, totalBytes, freeBytes, availableBytesForNonPrivilegs]
     '''
-    if logger is not None and verboseLevel > base.Const.LEVEL_LOOP:
+    if logger is not None and verboseLevel > Const.LEVEL_LOOP:
         logger.log('taskFileSystem()...', verboseLevel)
 
     rc = []
     ignoredDevs = ['udev', 'devpts', 'tmpfs', 'securityfs', 'pstore',
                    'cgroup', 'tracefs', 'mqueue', 'hugetlbfs', 'debugfs']
-    with open('/proc/mounts', 'r') as f:
-        for line in f:
+    with open('/proc/mounts', 'r', encoding='utf-8') as fp:
+        for line in fp:
             dev, path, fstype, rest = line.split(None, 3)
-            base.StringUtils.avoidWarning(rest)
-            if logger is not None and verboseLevel >= base.Const.LEVEL_FINE:
+            StringUtils.avoidWarning(rest)
+            if logger is not None and verboseLevel >= Const.LEVEL_FINE:
                 logger.log(line, verboseLevel)
             if (fstype in ['sysfs', 'proc'] or dev in ignoredDevs):
                 continue
@@ -39,7 +41,7 @@ def diskFree(verboseLevel=0, logger=None):
                 continue
             if not os.path.isdir(path):
                 continue
-            if logger is not None and verboseLevel >= base.Const.LEVEL_FINE:
+            if logger is not None and verboseLevel >= Const.LEVEL_FINE:
                 logger.log(path + '...', verboseLevel)
             info = diskInfo(path)
             if info is not None:
@@ -47,7 +49,7 @@ def diskFree(verboseLevel=0, logger=None):
     return rc
 
 
-def diskInfo(path):
+def diskInfo(path: str):
     '''Returns some infe about a mounted block device.
     @param path: the mount path
     @return: None: not available otherwise: [mountPath, totalBytes, freeBytes, availableBytesForNonPrivilegs]
@@ -65,26 +67,26 @@ def diskInfo(path):
     return rc
 
 
-def disksMounted(logger=None):
+def disksMounted(logger: Logger.Logger=None):
     '''Returns a list of mounted filesystems.
     @return: a list of mounted filesystems, e.g. ['/', '/home']
     '''
     if logger is not None:
-        logger.log('taskFileSystem()...', base.Const.LEVEL_LOOP)
+        logger.log('taskFileSystem()...', Const.LEVEL_LOOP)
 
     rc = []
     ignoredDevs = ['udev', 'devpts', 'tmpfs', 'securityfs', 'pstore',
                    'cgroup', 'tracefs', 'mqueue', 'hugetlbfs', 'debugfs']
-    with open('/proc/mounts', 'r') as f:
+    with open('/proc/mounts', 'r', encoding='utf-8') as fp:
         found = []
-        for line in f:
-            dev, path, fstype, rest = line.split(None, base.Const.LEVEL_LOOP)
-            base.StringUtils.avoidWarning(rest)
+        for line in fp:
+            dev, path, fstype, rest = line.split(None, Const.LEVEL_LOOP)
+            StringUtils.avoidWarning(rest)
             if dev in found:
                 continue
             found.append(dev)
             if logger is not None:
-                logger.log(line.rstrip(), base.Const.LEVEL_LOOP)
+                logger.log(line.rstrip(), Const.LEVEL_LOOP)
             if fstype == 'sysfs' or fstype == 'proc' or dev in ignoredDevs:
                 continue
             if (path.startswith('/proc/')
@@ -106,7 +108,7 @@ def diskIo():
     @return: array of arrays [id, diskname, countReads, countWrites, countDiscards], e.g. [ ['8-0-sda', 299, 498, 22 ] ]
     '''
     rc = []
-    with open('/proc/diskstats', 'r') as fp:
+    with open('/proc/diskstats', 'r', encoding='utf-8') as fp:
         for line in fp:
             # 1......2.....3....4.............5...........6...........7.........8..............
             # mainid subid name readscomplete readsmerged readsectors readmsecs writescomplete
@@ -117,7 +119,7 @@ def diskIo():
             # 8 0 sda 101755 2990 6113900 37622 69827 44895 1535408 41169 0 85216 2732 0 0 0 0
             # 8 1 sda1 82 0 6368 22 0 0 0 0 0 76 0 0 0 0 0
             parts = line.split()
-            rc.append(['{}-{}'.format(parts[0], parts[1]),
+            rc.append([f'{parts[0]}-{parts[1]}',
                        parts[2], parts[5], parts[9], parts[16]])
     return rc
 
@@ -130,8 +132,8 @@ def groupId(nameOrId, defaultValue=None):
     '''
     if isinstance(nameOrId, int):
         rc = nameOrId
-    elif base.StringUtils.asInt(nameOrId) is not None:
-        rc = base.StringUtils.asInt(nameOrId)
+    elif StringUtils.asInt(nameOrId) is not None:
+        rc = StringUtils.asInt(nameOrId)
     else:
         try:
             rc = grp.getgrnam(nameOrId).gr_gid
@@ -140,7 +142,7 @@ def groupId(nameOrId, defaultValue=None):
     return rc
 
 
-def isExecutable(statInfo, euid, egid):
+def isExecutable(statInfo, euid: int, egid: int) -> bool:
     '''Tests whether the file or directory) is executable
     @param statInfo: the result of os.stat()
     @param euid: the effective UID of the current process. We can get it with os.geteuid()
@@ -149,15 +151,15 @@ def isExecutable(statInfo, euid, egid):
     '''
     if statInfo.st_uid == euid:
         # S_IXUSR S_IXGRP S_IXOTH
-        mask = (stat.S_IXUSR | stat.S_IXOTH)
+        mask = stat.S_IXUSR | stat.S_IXOTH
     elif statInfo.st_gid == egid:
-        mask = (stat.S_IXGRP | stat.S_IXOTH)
+        mask = stat.S_IXGRP | stat.S_IXOTH
     else:
         mask = stat.S_IXOTH
     return (statInfo.st_mode & mask) != 0
 
 
-def isReadable(statInfo, euid, egid):
+def isReadable(statInfo, euid: int, egid: int):
     '''Tests whether the file or directory) is readable.
     @param statInfo: the result of os.stat()
     @param euid: the effective UID of the current process. We can get it with os.geteuid()
@@ -166,15 +168,15 @@ def isReadable(statInfo, euid, egid):
     '''
     if statInfo.st_uid == euid:
         # S_IXUSR S_IXGRP S_IXOTH
-        mask = (stat.S_IRUSR | stat.S_IROTH)
+        mask = stat.S_IRUSR | stat.S_IROTH
     elif statInfo.st_gid == egid:
-        mask = (stat.S_IRGRP | stat.S_IROTH)
+        mask = stat.S_IRGRP | stat.S_IROTH
     else:
         mask = stat.S_IROTH
     return (statInfo.st_mode & mask) != 0
 
 
-def isWritable(statInfo, euid, egid):
+def isWritable(statInfo, euid: int, egid: int):
     '''Tests whether the file or directory) is writable.
     @param statInfo: the result of os.stat()
     @param euid: the effective UID of the current process. We can get it with os.geteuid()
@@ -182,15 +184,15 @@ def isWritable(statInfo, euid, egid):
     @return: True: the file is writable
     '''
     if statInfo.st_uid == euid:
-        mask = (stat.S_IWUSR | stat.S_IWOTH)
+        mask = stat.S_IWUSR | stat.S_IWOTH
     elif statInfo.st_gid == egid:
-        mask = (stat.S_IWGRP | stat.S_IWOTH)
+        mask = stat.S_IWGRP | stat.S_IWOTH
     else:
         mask = stat.S_IWOTH
     return (statInfo.st_mode & mask) != 0
 
 
-def stress(patternDisks, patternInterface):
+def stress(patternDisks: str, patternInterface: str):
     '''Returns the load data of a server.
     Note: the byte data (ioReadBytes ... netWriteBytes) are summarized since boot time.
     @param patternDisk: a regular expression of the disk devices used for the result (sum is built), e.g. 'sd[ab]'
@@ -199,8 +201,8 @@ def stress(patternDisks, patternInterface):
     '''
     readIO = 0
     writeIO = 0
-    rexprDisks = base.StringUtils.regExprCompile(patternDisks, 'disk pattern')
-    with open('/proc/diskstats', 'r') as fp:
+    rexprDisks = StringUtils.regExprCompile(patternDisks, 'disk pattern')
+    with open('/proc/diskstats', 'r', encoding='utf-8') as fp:
         for line in fp:
             # 1......2.....3....4.............5...........6...........7.........8..............
             # mainid subid name readscomplete readsmerged readsectors readmsecs writescomplete
@@ -218,9 +220,9 @@ def stress(patternDisks, patternInterface):
     writeIO *= 512
     readNet = 0
     writeNet = 0
-    rexprNet = base.StringUtils.regExprCompile(
+    rexprNet = StringUtils.regExprCompile(
         patternInterface, 'interface pattern')
-    with open('/proc/net/dev', 'r') as fp:
+    with open('/proc/net/dev', 'r', encoding='utf-8') as fp:
         for line in fp:
             # 1......2........3......4....5....6....7.....8..........9.........10.......
             # Inter-|   Receive                                                |  Transmit
@@ -234,10 +236,10 @@ def stress(patternDisks, patternInterface):
             if rexprNet.match(parts[0][0:-1]) is not None:
                 readNet += int(parts[1])
                 writeNet += int(parts[9])
-    with open('/proc/loadavg', 'rb') as fp:
+    with open('/proc/loadavg', 'rb', encoding='utf-8') as fp:
         loadMin1 = float(fp.read().decode().split()[0])
     #@return: [TOTAL_RAM, AVAILABLE_RAM, TOTAL_SWAP, FREE_SWAP, BUFFERS]
-    with open('/proc/meminfo', 'r') as fp:
+    with open('/proc/meminfo', 'r', encoding='utf-8') as fp:
         lines = fp.read().split('\n')
         freeRam = _getNumber(lines[2])
         freeSwap = _getNumber(lines[15])
@@ -252,8 +254,8 @@ def userId(nameOrId, defaultValue=None):
     '''
     if isinstance(nameOrId, int):
         rc = nameOrId
-    elif base.StringUtils.asInt(nameOrId) is not None:
-        rc = base.StringUtils.asInt(nameOrId)
+    elif StringUtils.asInt(nameOrId) is not None:
+        rc = StringUtils.asInt(nameOrId)
     else:
         try:
             rc = pwd.getpwnam(nameOrId).pw_uid
@@ -288,7 +290,7 @@ def load():
     '''Returns average loads.
     @return: [LOAD_1_MINUTE, LOAD_5_MINUTE, LOAD_10_MINUTE, RUNNING_PROCESSES, PROCESSES]
     '''
-    with open('/proc/loadavg', 'rb') as fp:
+    with open('/proc/loadavg', 'rb', encoding='utf-8') as fp:
         data = fp.read().decode()
         matcher = re.match(r'(\S+)\s+(\S+)\s+(\S+)\s+(\d+)/(\d+)', data)
         if matcher is None:
@@ -299,7 +301,7 @@ def load():
     return rc
 
 
-def _getNumber(line):
+def _getNumber(line: str):
     parts = line.split()
     return int(parts[1])
 
@@ -308,7 +310,7 @@ def memoryInfo():
     '''Returns the memory usage.
     @return: [TOTAL_RAM, AVAILABLE_RAM, TOTAL_SWAP, FREE_SWAP, BUFFERS]
     '''
-    with open('/proc/meminfo', 'rb') as fp:
+    with open('/proc/meminfo', 'rb', encoding='utf-8') as fp:
         lines = fp.read().decode().split('\n')
         rc = [_getNumber(lines[0]), _getNumber(lines[2]), _getNumber(
             lines[14]), _getNumber(lines[15]), _getNumber(lines[3])]
@@ -323,7 +325,7 @@ def mdadmInfo(filename='/proc/mdstat'):
     '''
     rc = []
     if os.path.exists(filename):
-        with open(filename, 'r') as fp:
+        with open(filename, 'r', encoding='utf-8') as fp:
             # md2 : active raid1 sdc1[0] sdd1[1]
             # md1 : active raid1 hda14[0] sda11[2](F)
             rexpr1 = re.compile(r'^(\w+) : active (raid\d+) (.*)')
@@ -355,7 +357,7 @@ def main():
     '''
     infos = diskFree()
     for info in infos:
-        print(base.StringUtils.join(' ', info))
+        print(StringUtils.join(' ', info))
 
 
 if __name__ == '__main__':

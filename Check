@@ -1,0 +1,4 @@
+#! /bin/bash
+PYTHONPATH=/home/ws/py/form2linux
+pylint --ignore-paths debian  -v *.py base/*.py 
+
