@@ -14,7 +14,7 @@ import time
 from text import JsonUtils
 from base import StringUtils
 from base import FileHelper
-from Builder import Builder, CLIError
+from Builder import Builder, CLIError, GlobalOptions
 
 
 # pylint: disable-next=too-few-public-methods
@@ -59,12 +59,12 @@ class SetupBuilder (Builder):
     '''Processes the "setup" command.
     '''
 
-    def __init__(self, verbose: bool, dry: bool):
+    def __init__(self, options: GlobalOptions):
         '''Constructor.
         @param verbose: <em>True</em>: info messages will be displayed
         @param dry: <em>True</em>: says what to do, but do not change data
         '''
-        Builder.__init__(self, verbose, dry)
+        Builder.__init__(self, True, options)
         self._users = {}
         self._groups = {}
         self._activeUsers = pwd.getpwall()
@@ -413,7 +413,7 @@ class SetupBuilder (Builder):
     "smartctl -a /dev/sda": "%(STORAGE)/smartctl.sda.txt",
     "ps aux": "%(STORAGE)/ps.txt",
     "systemctl list-units": "%(STORAGE)/systemctl.list-units.txt",
-    "#cat /proc/mdstat": %(STORAGE)/mdstat.txt"
+    "#cat /proc/mdstat": "%(STORAGE)/mdstat.txt"
   }
 }
 '''

@@ -5,9 +5,10 @@ Created on: 20.08.2023
     Author: SeaPlusPro
    License: CC0 1.0 Universal
 '''
+import os.path
+import json
 import unittest
 import form2linux
-import os.path
 import base.MemoryLogger
 import base.ProcessHelper
 import base.StringUtils
@@ -33,19 +34,20 @@ class form2linuxTest(unittest.TestCase):
 
     def testPackageExample(self):
         if inDebug(): return
-        form2linux.main(['form2linux', 'package', 'example'])
-        logger = BuilderStatus.lastLogger()
-        lines = logger.getMessages()
-        self.assertEqual(1, len(lines))
-        self.assertTrue(lines[0].find('0.6.3') > 0)
+        fnOutput = base.FileHelper.tempFile('package.example', 'unittest')
+        form2linux.main(['form2linux', 'package', 'example', f'--file={fnOutput}'])
+        lines = base.StringUtils.fromFile(fnOutput)
+        json.loads(lines)
+        self.assertTrue(lines.find('0.6.3') > 0)
 
     def testServiceExample(self):
         if inDebug(): return
         form2linux.main(['form2linux', 'service', 'example'])
-        logger = BuilderStatus.lastLogger()
-        lines = logger.getMessages()
-        self.assertEqual(1, len(lines))
-        self.assertTrue(lines[0].find('examplesv') > 0)
+        fnOutput = base.FileHelper.tempFile('service.example', 'unittest')
+        form2linux.main(['form2linux', 'service', 'example', f'--file={fnOutput}'])
+        lines = base.StringUtils.fromFile(fnOutput)
+        json.loads(lines)
+        self.assertTrue(lines.find('examplesv') > 0)
 
     def testServiceInstall(self):
         if inDebug(): return

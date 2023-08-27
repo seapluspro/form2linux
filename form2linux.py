@@ -37,12 +37,13 @@ from PackageBuilder import PackageBuilder
 from TextTool import TextTool
 from ServiceBuilder import ServiceBuilder
 from SetupBuilder import SetupBuilder
-from Builder import CLIError
+from InstallBuilder import InstallBuilder
+from Builder import CLIError, GlobalOptions
 
 __all__ = []
-__version__ = '0.3.1'
+__version__ = '0.4.1'
 __date__ = '2023-08-20'
-__updated__ = '2023-08-25'
+__updated__ = '2023-08-27'
 
 DEBUG = 1
 TESTRUN = 0
@@ -84,6 +85,46 @@ form2linux service install service.json
 
 '''
     return (programLicense, programVersionMessage, programName)
+
+
+def defineInstall(subparsersMain):
+    '''Defines the sub commands / options of the section "install".
+    @param subparsersMain: the parent of the new parsers
+    '''
+    parserInstall = subparsersMain.add_parser(
+        'install', help='installs and configures packages.')
+    subparsersInstall = parserInstall.add_subparsers(
+        help='install help', dest='install')
+    parserStandardHost = subparsersInstall.add_parser(
+        'standard-host',  help='prepares a standard linux host')
+    parserStandardHost.add_argument(
+        'form', help='the Json form with the configuration data. Create it with example-standard-host')
+
+    parserExampleStandardHost = subparsersInstall.add_parser(
+        'example-standard-host',  help='shows an example configuration of the command "standard-host"')
+    parserExampleStandardHost.add_argument(
+        '-f', '--file', dest='file', help='the example will be stored in that file')
+
+def definePackage(subparsersMain):
+    '''Defines the sub commands / options of the section "package".
+    @param subparsersMain: the parent of the new parsers
+    '''
+    parserPackage = subparsersMain.add_parser(
+        'package', help='Builds a debian package from a package description in Json format.')
+    subparsersPackage = parserPackage.add_subparsers(
+        help='package help', dest='package')
+    parserExample = subparsersPackage.add_parser(
+        'example', help='shows an example configuration file. Can be used for initializing a new package project.')
+    parserExample.add_argument('-f', '--file', dest='file',
+                               help='the output is stored in that file')
+    parserCheck = subparsersPackage.add_parser(
+        'check', help='checks the configuration file')
+    parserCheck.add_argument(
+        'configuration', help='the configuration file', default='project.json')
+    parserBuild = subparsersPackage.add_parser(
+        'build', help='builds the debian package')
+    parserBuild.add_argument(
+        'configuration', help='defines the properties and the contents of the Debian package.', default='package.json')
 
 
 def defineSetup(subparsersMain):
@@ -145,28 +186,6 @@ def defineSetup(subparsersMain):
         '-f', '--file', dest='file', help='the result is stored there')
 
 
-def definePackage(subparsersMain):
-    '''Defines the sub commands / options of the section "package".
-    @param subparsersMain: the parent of the new parsers
-    '''
-    parserPackage = subparsersMain.add_parser(
-        'package', help='Builds a debian package from a package description in Json format.')
-    subparsersPackage = parserPackage.add_subparsers(
-        help='package help', dest='package')
-    parserExample = subparsersPackage.add_parser(
-        'example', help='shows an example configuration file. Can be used for initializing a new package project.')
-    parserExample.add_argument('-f', '--file', dest='file',
-                               help='the output is stored in that file')
-    parserCheck = subparsersPackage.add_parser(
-        'check', help='checks the configuration file')
-    parserCheck.add_argument(
-        'configuration', help='the configuration file', default='project.json')
-    parserBuild = subparsersPackage.add_parser(
-        'build', help='builds the debian package')
-    parserBuild.add_argument(
-        'configuration', help='defines the properties and the contents of the Debian package.', default='package.json')
-
-
 def defineService(subparsersMain):
     '''Defines the sub commands / options of the section "service".
     @param subparsersMain: the parent of the new parsers
@@ -222,13 +241,26 @@ def defineText(subparsersMain):
                                     dest='newline', help="add a newline at the --replacement string")
 
 
-def executePackage(args, verbose: bool, dry: bool):
+def executeInstall(args, options: GlobalOptions):
+    '''Switches to a subcommand of "install".
+    @param args: the arguments
+    @param options: the global options
+    '''
+    builder = InstallBuilder(options)
+    if args.install == 'example-standard-host':
+        builder.exampleStandardHost(args.file)
+    elif args.install == 'standard-host':
+        builder.standardHost(args.form)
+    else:
+        raise CLIError(f'unknown command: {args.install}')
+
+
+def executePackage(args, options: GlobalOptions):
     '''Switches to a subcommand of "package".
     @param args: the arguments
-    @param verbose: True: show info messages
-    @param dry: says what to do, but do nothing
+    @param options: the global options
     '''
-    builder = PackageBuilder(verbose, dry)
+    builder = PackageBuilder(options)
     if args.package == 'example':
         builder.example(args.file)
     elif args.package == 'check':
@@ -239,13 +271,12 @@ def executePackage(args, verbose: bool, dry: bool):
         raise CLIError(f'unknown command: {args.package}')
 
 
-def executeService(args, verbose: bool, dry: bool):
+def executeService(args, options: GlobalOptions):
     '''Switches to a subcommand of "service".
     @param args: the arguments
-    @param verbose: True: show info messages
-    @param dry: says what to do, but do nothing
+    @param options: the global options
     '''
-    builder = ServiceBuilder(verbose, dry)
+    builder = ServiceBuilder(options)
     if args.service == 'example':
         builder.example(args.file)
     elif args.service == 'check':
@@ -256,13 +287,12 @@ def executeService(args, verbose: bool, dry: bool):
         raise CLIError(f'unknown command: {args.package}')
 
 
-def executeSetup(args, verbose: bool, dry: bool):
+def executeSetup(args, options: GlobalOptions):
     '''Switches to a subcommand of "setup".
     @param args: the arguments
-    @param verbose: True: show info messages
-    @param dry: says what to do, but do nothing
+    @param options: the global options
     '''
-    builder = SetupBuilder(verbose, dry)
+    builder = SetupBuilder(options)
     if args.setup == 'add-standard-users':
         builder.addStandardUsers(args.form)
     elif args.setup == 'adapt-users':
@@ -306,32 +336,39 @@ def main(argv=None):  # IGNORE:C0111
                             version=programVersionMessage)
         parser.add_argument('-y', '--dry', dest='dry', action="store_true",
                             help="do not create files and directories")
-
+        parser.add_argument('-n', '--not-root', dest='notRoot', action="store_false",
+                            help="commmand must not be executed as root")
+        parser.add_argument('-R', '--root', dest='root', action="store_true",
+                            help="commmand must be executed as root")
         subparsersMain = parser.add_subparsers(
             help='sub-command help', dest='main')
 
-        defineSetup(subparsersMain)
 
+        defineInstall(subparsersMain)
         definePackage(subparsersMain)
-
         defineService(subparsersMain)
-
+        defineSetup(subparsersMain)
         defineText(subparsersMain)
 
         # Process arguments
         args = parser.parse_args(argv[1:])
-
-        verbose = args.verbose
+        options = GlobalOptions(args.verbose, args.dry, None)
+        if args.notRoot:
+            options.needsRoot = False
+        elif args.root:
+            options.needsRoot = True
         dry = args.dry
-        if args.main == 'package':
-            executePackage(args, verbose, dry)
+        if args.main == 'install':
+            executeInstall(args, options)
+        elif args.main == 'package':
+            executePackage(args, options)
         elif args.main == 'service':
-            executeService(args, verbose, dry)
+            executeService(args, options)
         elif args.main == 'setup':
-            executeSetup(args, verbose, dry)
+            executeSetup(args, options)
         elif args.main == 'text':
             if args.text == 'replace-range':
-                builder = TextTool(verbose, dry)
+                builder = TextTool(options)
                 builder.replaceRange(args.document, args.replacement, args.file,
                                      args.anchor, args.start, args.end, args.minLength,
                                      args.newline)

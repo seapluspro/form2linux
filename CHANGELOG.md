@@ -1,5 +1,22 @@
 # Changelog
 
+# [0.4.1] - 2023-08-27
+
+## Added
+- mode install with standard-host and example-standard-host
+- new global options --root and --not-root
+- Builder: 
+    - GlobalLogger
+    - checkPattern(), checkNodePattern()
+    - ensureDirectory(), needsRoot(), canWrite()
+    - saveFile(), writeFile()
+
+## Changed
+- constructor of Builder: parameter options
+
+## Fixed
+- SetupBuilder::exampleSystemInfo(): missing "
+
 # [0.3.1] - 2023-08-25
 
 ## Added

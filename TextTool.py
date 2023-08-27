@@ -7,11 +7,11 @@ Created on: 20.08.2023
 '''
 import re
 import base.StringUtils
-from Builder import Builder, CLIError
+from Builder import Builder, CLIError, GlobalOptions
 
 class TextTool (Builder):
-    def __init__(self, verbose: bool, dry: bool):
-        Builder.__init__(self, verbose, dry)
+    def __init__(self, options: GlobalOptions):
+        Builder.__init__(self, False, options)
         
     def replaceRange(self, document: str, replacement: str, fileReplacement: str, 
                      anchor: str, start: str, end: str, minLength: int, newline: bool):

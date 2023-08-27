@@ -10,7 +10,7 @@ import json
 import pwd
 import grp
 from text import JsonUtils
-from Builder import Builder, CLIError
+from Builder import Builder, CLIError, GlobalOptions
 from base import StringUtils
 
 
@@ -18,12 +18,12 @@ class ServiceBuilder (Builder):
     '''Manages the "service" commands.
     '''
 
-    def __init__(self, verbose: bool, dry: bool):
+    def __init__(self, options: GlobalOptions):
         '''Constructor.
         @param verbose: <em>True</em>: info messages will be displayed
         @param dry: <em>True</em>: says what to do, but do not change data
         '''
-        Builder.__init__(self, verbose, dry)
+        Builder.__init__(self, True, options)
         self._name = None
         self._file = None
         self._description = None

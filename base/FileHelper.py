@@ -435,7 +435,7 @@ def ensureDirectory(directory: str, mode: int=0o777, user: str=None, group: str=
             os.unlink(directory)
         except FileNotFoundError:
             pass
-        _log(f'creating {directory}{os.sep} ...', Const.LEVEL_SUMMARY)
+        _log(f'creating {directory}{os.sep}', Const.LEVEL_SUMMARY)
         try:
             os.makedirs(directory, mode)
             os.chmod(directory, mode)

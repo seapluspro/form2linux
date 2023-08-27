@@ -5,6 +5,7 @@ Created on: 20.08.2023
     Author: SeaPlusPro
    License: CC0 1.0 Universal
 '''
+import json
 import unittest
 import form2linux
 import Builder
@@ -181,6 +182,7 @@ hugo2:$6$NoNoNo:19550:0:99999:7:::
         fnOutput = base.FileHelper.tempFile('archive.example', 'unittest')
         form2linux.main(['form2linux', 'setup', 'example-archive', f'--file={fnOutput}'])
         lines = base.StringUtils.fromFile(fnOutput)
+        json.loads(lines)
         self.assertTrue(lines.find('tar --zstd -cf') >= 0)
 
     def testExampleAddStandardUsers(self):
@@ -188,6 +190,7 @@ hugo2:$6$NoNoNo:19550:0:99999:7:::
         fnOutput = base.FileHelper.tempFile('addstdusr.example', 'unittest')
         form2linux.main(['form2linux', 'setup', 'example-add-standard-users', f'--file={fnOutput}'])
         lines = base.StringUtils.fromFile(fnOutput)
+        json.loads(lines)
         self.assertTrue(lines.find('bupsupply') >= 0)
 
     def testExampleSystemInfo(self):
@@ -195,6 +198,7 @@ hugo2:$6$NoNoNo:19550:0:99999:7:::
         fnOutput = base.FileHelper.tempFile('sysinfo.example', 'unittest')
         form2linux.main(['form2linux', 'setup', 'example-system-info', f'--file={fnOutput}'])
         lines = base.StringUtils.fromFile(fnOutput)
+        json.loads(lines)
         self.assertTrue(lines.find('STORAGE') >= 0)
 
     def testSystemInfo(self):

@@ -10,10 +10,13 @@ import os.path
 import shutil
 import fnmatch
 import subprocess
+import time
 from text import JsonUtils
+from base import Const
 from base import MemoryLogger
 from base import ProcessHelper
 from base import StringUtils
+from base import FileHelper
 
 class CLIError(Exception):
     '''Generic exception to raise and log different fatal errors.'''
@@ -27,6 +30,19 @@ class CLIError(Exception):
 
     def __unicode__(self):
         return self.msg
+
+class GlobalOptions:
+    '''Stores the global program arguments.
+    '''
+    def __init__(self, verbose: bool, dry: bool, needsRoot: bool):
+        '''Constructor.
+        @param verbose: True: show info messages
+        @param dry: say what to do but do not
+        @param needsRoot: the task need root rights
+        '''
+        self.verbose = verbose
+        self.dry = dry
+        self.needsRoot = needsRoot
 
 class BuilderStatus:
     '''Stores the logger. Needed for unittests.
@@ -53,22 +69,27 @@ def lastLogger():
 class Builder:
     '''Base class of all manager classes of form2linux.
     '''
-    def __init__(self, verbose: bool, dry: bool):
+    def __init__(self, needsRoot: bool, options: GlobalOptions):
         '''Constructor.
         @param verbose: <em>True</em>: info messages will be displayed
         @param dry: <em>True</em>: says what to do, but do not change data
         '''
         self._verboseLevel = 3
-        self._verbose = verbose
+        self._verbose = options.verbose
+        self._dry = options.dry
+        self._needsRoot = needsRoot
+        self._options = options
+        if options.needsRoot != None:
+            self._needsRoot = options.needsRoot
         self._variables = {}
+        self._wrongFilenameChars = r'[\s;:,?* (){}\[\]]'
         self._root = None
         self._errors = []
         self._dirs = []
         self._files = {}
         self._links = {}
         self._baseDirectory = ''
-        self._dry = dry
-        self._logger = MemoryLogger.MemoryLogger(1)
+        self._logger = MemoryLogger.MemoryLogger(Const.LEVEL_DETAIL)
         BuilderStatus.setLogger(self._logger)
         self._processHelper = ProcessHelper.ProcessHelper.__init__(self, self._logger)
         self._standardDirectories = ('boot', 'dev', 'etc', 'etc/default', 'home', 'lib',
@@ -91,9 +112,7 @@ class Builder:
         regExpr = re.compile(r'([:\s$])')
         for item in dirs:
             name = self.replaceVariables(item)
-            match = regExpr.match(name)
-            if match is not None:
-                raise CLIError(f'wrong character "{match.group(1)}" in directory name: {item}')
+            self.checkPattern('Directories', name, None, self._wrongFilenameChars)
             if name.startswith('/'):
                 name = name[1:]
             self._dirs.append(name)
@@ -120,13 +139,9 @@ class Builder:
         regExpr = re.compile(r'([:\s$])')
         for file in files:
             name = self.replaceVariables(file)
-            match = regExpr.match(name)
-            if match is not None:
-                raise CLIError(f'wrong character "{match.group(1)}" in link source: {file}')
+            self.checkPattern(f'Links.{file} (source)', name, None, self._wrongFilenameChars)
             target = self.replaceVariables(files[file])
-            match = regExpr.match(name)
-            if match is not None:
-                raise CLIError(f'wrong character "{match.group(1)}" in link target: {target}')
+            self.checkPattern(f'Links.{file} (target)', target, None, self._wrongFilenameChars)
             self._links[name] = target
 
     def checkLinksLate(self):
@@ -136,6 +151,44 @@ class Builder:
             full = os.path.join(self._baseDirectory, file)
             if not os.path.exists(full):
                 self.error(f'missing link source: {full}')
+
+    def checkNodePattern(self, path: str, pattern: str, wrongCharacters: str=None, errorMessage: str=None) -> str:
+        '''Checks a string with regular expressions.
+        @param path: the path in the Json tree, e.g. "Person Name"
+        @param pattern: None or the pattern that must match
+        @param wrongCharacters: None or the characters that must not occur
+        @param errorMessage: None or the error message
+        @raise CLIError: on error 
+        @return: the correct value found at the path
+        '''
+        value = self.valueOf(path)
+        if pattern is not None and re.search(pattern, value) is None:
+            if errorMessage is None:
+                errorMessage = f'''"{path.replace(' ', '.')}": wrong syntax: {value}'''
+            raise CLIError(errorMessage)
+        if wrongCharacters is not None:
+            matcher = re.search(wrongCharacters, value)
+            if matcher is not None:
+                CLIError(f'''"{path.replace(' ', '.')}": wrong character "{matcher.group(0)}" in {value}''')
+        return value
+
+    def checkPattern(self, name: str, value: str, pattern: str, wrongCharacters: str=None, errorMessage: str=None):
+        '''Checks a string with regular expressions.
+        @param value: the string to test
+        @param name: the name of the value to test
+        @param pattern: None or the pattern that must match
+        @param wrongCharacters: None or the characters that must not occur
+        @param errorMessage: None or the error message
+        @raise CLIError: on error 
+        '''
+        if pattern is not None and re.search(pattern, value) is None:
+            if errorMessage is None:
+                errorMessage = f'"{name}": wrong syntax: {value}'
+            raise CLIError(errorMessage)
+        if wrongCharacters is not None:
+            matcher = re.search(wrongCharacters, value)
+            if matcher is not None:
+                CLIError(f'"{name}": wrong character "{matcher.group(0)}" in {value}')
 
     def copyFile(self, source: str, target: str):
         '''Copies a file if the dry mode is not on.
@@ -160,6 +213,19 @@ class Builder:
                 fullTarget = os.path.join(targetDirectory, node)
                 self.info(f'{fullSource} -> {fullTarget}')
                 self.copyFile(fullSource, fullTarget)
+
+    def ensureDirectory(self, path: str, asRoot: bool=None):
+        '''Creates a directory if it does not exists.
+        @param path: the name of the directory
+        @param asRoot: <em>True</em>: the command must be executed as root
+        '''
+        if asRoot is None:
+            asRoot = self._needsRoot
+        if not os.path.exists(path):
+            if self.canWrite(asRoot):
+                FileHelper.ensureDirectory(path)
+            else:
+                self.log(f'sudo mkdir -p {path}')
 
     def finishVariables(self):
         '''Does the things if all variables are inserted: expand the variables in the values.
@@ -228,6 +294,34 @@ class Builder:
         '''
         self._logger.info(message)
 
+    def makeDirectory(self, name):
+        '''Makes a directory (recursive) if the dry mode is not on.
+        @param name: the name of the directory to create
+        '''
+        if self._dry:
+            self.log(f'mkdir -p {name}')
+        else:
+            os.makedirs(name, 0o777)
+
+    def needsRoot(self, needsRoot: bool):
+        '''Tests whether being root is needed.
+        @param needsRoot: <em>None</em>: use the default value. <em>True</em>: action needs being root
+        @return: <em>True</em>: action needs being root
+        '''
+        rc = needsRoot
+        if rc is None:
+            rc = self._needsRoot
+        return rc
+
+    def canWrite(self, asRoot: bool):
+        '''Tests whether being root is needed.
+        @param asRoot: <em>None</em>: use the default value. <em>True</em>: action needs being root
+        @return: <em>True</em>: action needs being root
+        '''
+        #if not self._dry and (not asRoot or os.geteuid() == 0):
+        rc = not self._dry and (not self.needsRoot(asRoot) or os.geteuid() == 0)
+        return rc
+
     def replaceVariables(self, value: str) -> str:
         '''Tests whether the value contains a variable. In this case it will be replaced by the variable value.
         @param value: the string to inspect
@@ -239,23 +333,14 @@ class Builder:
                 value = value.replace(variable, value2)
         return value
 
-    def makeDirectory(self, name):
-        '''Makes a directory (recursive) if the dry mode is not on.
-        @param name: the name of the directory to create
-        '''
-        if self._dry:
-            self.log(f'mkdir -p {name}')
-        else:
-            os.makedirs(name, 0o777)
-
-    def runProgram(self, command: str, asRoot: bool=True, verbose: bool=True, outputFile: str=None):
+    def runProgram(self, command: str, asRoot: bool=None, verbose: bool=True, outputFile: str=None):
         '''Runs a program if it possible or print the command if not.
         @param command: the command to execute
         @param asRoot: <em>True</em>: the command must be executed as root
         @param verbose: <em>True</em>: show the command
         @param outputFile: <em>None</em> or the file where the program output is stored
         '''
-        if not self._dry and (not asRoot or os.geteuid() == 0):
+        if self.canWrite(asRoot):
             output = subprocess.check_output(command.split(' '))
             if outputFile is not None:
                 StringUtils.toFile(outputFile, output.decode('utf-8'))
@@ -264,6 +349,15 @@ class Builder:
         else:
             out = '' if outputFile is None else f' >{outputFile}'
             self.log(f'sudo {command}{out}')
+
+    def saveFile(self, filename, asRoot: bool=None):
+        '''Renames a file to a file with a unique name.
+        @param filename: the file to save
+        @param asRoot: the file can only be written as root
+        '''
+        if os.path.exists(filename):
+            unique = int(time.time())
+            self.runProgram(f'mv -v {filename} {filename}.{unique}', True, True)
 
     def setVariable(self, name, value):
         '''Sets a variable.
@@ -281,3 +375,14 @@ class Builder:
         value = JsonUtils.nodeOfJsonTree(self._root, path, nodeType, False)
         value = self.replaceVariables(value)
         return value
+
+    def writeFile(self, filename: str, contents: str, asRoot: bool=None):
+        '''Writes a file as root or print a message.
+        @param filename: the name of the file to write
+        @param contents: the contents of the file
+        @param asRoot: the file can only be written as root
+        '''
+        if self.canWrite(asRoot):
+            StringUtils.toFile(filename, contents)
+        else:
+            self.log(f'# would write to {filename}')

@@ -13,20 +13,19 @@ import json
 import re
 from base import StringUtils
 from text import JsonUtils
-from Builder import Builder, CLIError
+from Builder import Builder, CLIError, GlobalOptions
 
 
 class PackageBuilder (Builder):
     '''Manages the "package" commands.
     '''
 
-    def __init__(self, verbose: bool, dry: bool):
+    def __init__(self, options: GlobalOptions):
         '''Constructor.
         @param verbose: <em>True</em>: info messages will be displayed
         @param dry: <em>True</em>: says what to do, but do not change data
         '''
-        Builder.__init__(self, verbose, dry)
-        self._verbose = verbose
+        Builder.__init__(self, False, options)
         self._package = None
         self._version = None
         self._architecture = None
@@ -195,12 +194,11 @@ PATH=/usr/bin:/bin:/usr/sbin:/sbin
         self.buildPostInstall()
         self.buildPostRm()
 
-    def check(self, configuration: str):
+    def check(self, form: str):
         '''Checks the form and stores the data found there.
-        @param configuration: the Json form with the package definition
+        @param form: the Json form with the package definition
         '''
-        self.log(f'current directory: {os.getcwd()}')
-        with open(configuration, 'r', encoding='utf-8') as fp:
+        with open(form, 'r', encoding='utf-8') as fp:
             data = fp.read()
             self._root = root = json.loads(data)
             path = 'Project:m Directories:a Files:m Links:m PostInstall:s PostRemove:s'
@@ -253,7 +251,7 @@ PATH=/usr/bin:/bin:/usr/sbin:/sbin
             notices = self.valueOf('Project Notes', 'a')
             for notice in notices:
                 self._notes.append(notice)
-            self.log(f'= configuration syntax is OK: {configuration}')
+            self.log(f'= configuration syntax is OK: {form}')
             self.checkFiles()
             self.checkDirectories()
             self.checkLinks()
