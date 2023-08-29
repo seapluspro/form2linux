@@ -13,12 +13,30 @@ function ChangeMd(){
     form2linux -v text replace-range ../doc/$file --file=$OUTPUT "--anchor=^###.The.Form"
   fi
 }
+function ChangeExample(){
+  local file=$1
+  local mode=$2
+  local command=$3
+  #echo "=== $file $mode $command:"
+  form2linux -v $mode example-$command --file=$OUTPUT
+  form2linux -v text replace-range ../doc/$file --file=$OUTPUT "--anchor=^###.The.Form.$command"
+}
 sed -i "s/^.debian.form2linux-[0-9.]*/\/debian\/form2linux-$VERSION/" ../.gitignore
+
 if [ a = a ]; then
 form2linux -v text replace-range package.json --replacement=$VERSION --anchor=Variables '--start=VERSION":."' '--end="'
+form2linux --help >$OUTPUT
+form2linux -v text replace-range ../README.md --file=$OUTPUT "--anchor=##.form2task.-h"
+ChangeMd install.md text noexample
 ChangeMd package.md package
 ChangeMd service.md service
+ChangeMd setup.md service noexample
 ChangeMd text.md text noexample
 form2linux -v package build package.json
+ChangeExample install.md install standard-host
+ChangeExample setup.md setup add-standard-users
+ChangeExample setup.md setup archive
+ChangeExample setup.md setup system-info
 mv -v form2linux-*.deb packages/
+echo "$VERSION" >packages/version.txt
 fi

@@ -4,15 +4,22 @@ The task "Text" offers text manipulation.
 
 ### Usage
 ```
-usage: form2linux.py text [-h] {replace-range} ...
+usage: form2linux.py text [-h]
+                          {adapt-variables,example-adapt-variables,replace-range}
+                          ...
 
 positional arguments:
-  {replace-range}  text help
-    replace-range  replaces a section in text document with a string or a
-                   file.
+  {adapt-variables,example-adapt-variables,replace-range}
+                        text help
+    adapt-variables     replaces variables in a configuration file if needed.
+    example-adapt-variables
+                        shows an example form for the command "adapt-
+                        variables".
+    replace-range       replaces a section in text document with a string or a
+                        file.
 
 options:
-  -h, --help       show this help message and exit
+  -h, --help            show this help message and exit
 ```
 
 ### Examples

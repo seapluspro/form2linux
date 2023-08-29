@@ -28,23 +28,16 @@ form2linux setup system-info myform.json
 
 ### Usage
 ```
-usage: form2linux.py setup [-h]
-                           {adapt-users,add-standard-users,example-add-standard-users,archive,example-archive,patch-shadow,system-info,example-system-info}
-                           ...
+usage: form2linux.py service [-h] {example,check,install} ...
 
 positional arguments:
-  {adapt-users,add-standard-users,example-add-standard-users,archive,example-archive,patch-shadow,system-info,example-system-info}
-                        setup help
-    adapt-users         creates users and groups from safed versions of passwd and group
-    add-standard-users  creates users and groups from a Json form
-    example-add-standard-users
-                        shows a form for the "add-standard-users" command
-    archive             stores files into a archive
-    example-archive     shows the form of the command "archive"
-    patch-shadow        puts an encoded password into the shadow password file
-    system-info         assembles the state of the current system
-    example-system-info
-                        shows an example form for the command "system-info"
+  {example,check,install}
+                        service help
+    example             shows an example configuration file. Can be used as
+                        template for a new service.
+    check               checks the configuration file
+    install             Installs a systemd service defined by a Json
+                        configuration file.
 
 options:
   -h, --help            show this help message and exit

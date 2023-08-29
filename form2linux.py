@@ -41,9 +41,9 @@ from InstallBuilder import InstallBuilder
 from Builder import CLIError, GlobalOptions
 
 __all__ = []
-__version__ = '0.4.1'
+__version__ = '0.5.1'
 __date__ = '2023-08-20'
-__updated__ = '2023-08-27'
+__updated__ = '2023-08-29'
 
 DEBUG = 1
 TESTRUN = 0
@@ -73,7 +73,8 @@ def buildUsageMessage(argv):
 
 Examples:
 
-form2linux --help
+form2linux install example-standard-host myform.json
+form2linux install standard-host myform.json
 
 form2linux package example
 form2linux package example package.json
@@ -83,6 +84,11 @@ form2linux service example
 form2linux service example service.json
 form2linux service install service.json
 
+form2linux setup example-add-standrd-users myform.json
+form2linux setup add-standrd-users myform.json
+
+form2linux text replace-range readme.md --replacement=0.4.2 \
+  --anchor=Download --start=myfile. --end=.txt
 '''
     return (programLicense, programVersionMessage, programName)
 
@@ -95,6 +101,17 @@ def defineInstall(subparsersMain):
         'install', help='installs and configures packages.')
     subparsersInstall = parserInstall.add_subparsers(
         help='install help', dest='install')
+
+    parserPhp = subparsersInstall.add_parser(
+        'php',  help='installs and configures the PHP packages')
+    parserPhp.add_argument(
+        'form', help='the Json form with the configuration data. Create it with example-php')
+
+    parserExamplePhp = subparsersInstall.add_parser(
+        'example-php',  help='shows an example configuration of the command "php"')
+    parserExamplePhp.add_argument(
+        '-f', '--file', dest='file', help='the example will be stored in that file')
+
     parserStandardHost = subparsersInstall.add_parser(
         'standard-host',  help='prepares a standard linux host')
     parserStandardHost.add_argument(
@@ -216,6 +233,14 @@ def defineText(subparsersMain):
         'text', help='Some text manipulation.')
     subparsersText = parserText.add_subparsers(
         help='text help', dest='text')
+    parserAdaptVariables = subparsersText.add_parser(
+        'adapt-variables', help='replaces variables in a configuration file if needed.')
+    parserAdaptVariables.add_argument(
+        'form', help='the form with the specification. Create it with "example-adapt-variables"')
+    parserExampleAdaptVariables = subparsersText.add_parser(
+        'example-adapt-variables', help='shows an example form for the command "adapt-variables".')
+    parserExampleAdaptVariables.add_argument(
+        '-f', '--file', dest='file', help='the result is stored here')
     parserReplaceRange = subparsersText.add_parser(
         'replace-range', help='replaces a section in text document with a string or a file.')
     parserReplaceRange.add_argument(
@@ -228,6 +253,10 @@ def defineText(subparsersMain):
         '-s', '--start', dest='start', help="a regular expression starting the range to change.", default="```")
     parserReplaceRange.add_argument(
         '-e', '--end', dest='end', help="a regular expression ending the range to change.", default="```")
+    parserReplaceRange.add_argument(
+        '-p', '--insertion-position', dest='insertionPosition', help="a regular expression of the position where the insertion should be done.", default="```")
+    parserReplaceRange.add_argument(
+        '-i', '--insertion', dest='insertion', help="this string will be inserted if the --start is not found")
     parserReplaceRange.add_argument('-a', '--anchor', dest='anchor',
                                     # pylint disable-next=line-too-long
                                     help="a regular expression defining the position of the text change. " +
@@ -236,7 +265,7 @@ def defineText(subparsersMain):
     # pylint: disable-next=line-too-long
     parserReplaceRange.add_argument('-m', '--min-length', dest='minLength',
                                     help="the replacement or replacement file must have at least that length",
-                                    default=3)
+                                    default=1)
     parserReplaceRange.add_argument('-n', '--newline', action="store_true",
                                     dest='newline', help="add a newline at the --replacement string")
 
@@ -247,7 +276,11 @@ def executeInstall(args, options: GlobalOptions):
     @param options: the global options
     '''
     builder = InstallBuilder(options)
-    if args.install == 'example-standard-host':
+    if args.install == 'example-php':
+        builder.examplePhp(args.file)
+    elif args.install == 'php':
+        builder.php(args.form)
+    elif args.install == 'example-standard-host':
         builder.exampleStandardHost(args.file)
     elif args.install == 'standard-host':
         builder.standardHost(args.form)
@@ -316,7 +349,23 @@ def executeSetup(args, options: GlobalOptions):
     else:
         raise CLIError(f'unknown command: {args.setup}')
 
-# xpylint: disable-next=too-many-statements,too-many-branches,too-many-locals
+def executeText(args, options: GlobalOptions):
+    '''Switches to a subcommand of "setup".
+    @param args: the arguments
+    @param options: the global options
+    '''
+    builder = TextTool(options)
+    if args.text == 'replace-range':
+        builder.replaceRange(args.document, args.replacement, args.file,
+                             args.anchor, args.start, args.end, 
+                             args.insertionPosition, args.insertion,
+                             int(args.minLength), args.newline)
+    elif args.text == 'adapt-variables':
+        builder.adaptVariables(args.form)
+    elif args.text == 'example-adapt-variables':
+        builder.exampleAdaptVariables(args.file)
+    else:
+        raise CLIError(f'unknown command: {args.text}')
 
 
 def main(argv=None):  # IGNORE:C0111
@@ -367,13 +416,7 @@ def main(argv=None):  # IGNORE:C0111
         elif args.main == 'setup':
             executeSetup(args, options)
         elif args.main == 'text':
-            if args.text == 'replace-range':
-                builder = TextTool(options)
-                builder.replaceRange(args.document, args.replacement, args.file,
-                                     args.anchor, args.start, args.end, args.minLength,
-                                     args.newline)
-            else:
-                raise CLIError(f'unknown command: {args.text}')
+            executeText(args, options)
         else:
             raise CLIError(f'unknown command: {args.main}')
         return 0

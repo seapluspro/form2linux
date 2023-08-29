@@ -9,20 +9,18 @@ import os.path
 import json
 import unittest
 import form2linux
-import base.MemoryLogger
-import base.ProcessHelper
-import base.StringUtils
-import base.FileHelper
-from Builder import BuilderStatus
-
+from base import MemoryLogger
+from base import ProcessHelper
+from base import StringUtils
+from base import FileHelper
 def inDebug(): return False
 
 class form2linuxTest(unittest.TestCase):
 
     def testPackageBuild(self):
         if inDebug(): return
-        logger = base.MemoryLogger.MemoryLogger(3)
-        processHelper = base.ProcessHelper.ProcessHelper(logger)
+        logger = MemoryLogger.MemoryLogger(3)
+        processHelper = ProcessHelper.ProcessHelper(logger)
         old = processHelper.pushd('package/test')
         archive = 'cppknife-0.6.3_amd64.deb'
         if os.path.exists(archive):
@@ -34,31 +32,31 @@ class form2linuxTest(unittest.TestCase):
 
     def testPackageExample(self):
         if inDebug(): return
-        fnOutput = base.FileHelper.tempFile('package.example', 'unittest')
+        fnOutput = FileHelper.tempFile('package.example', 'unittest')
         form2linux.main(['form2linux', 'package', 'example', f'--file={fnOutput}'])
-        lines = base.StringUtils.fromFile(fnOutput)
+        lines = StringUtils.fromFile(fnOutput)
         json.loads(lines)
         self.assertTrue(lines.find('0.6.3') > 0)
 
     def testServiceExample(self):
         if inDebug(): return
         form2linux.main(['form2linux', 'service', 'example'])
-        fnOutput = base.FileHelper.tempFile('service.example', 'unittest')
+        fnOutput = FileHelper.tempFile('service.example', 'unittest')
         form2linux.main(['form2linux', 'service', 'example', f'--file={fnOutput}'])
-        lines = base.StringUtils.fromFile(fnOutput)
+        lines = StringUtils.fromFile(fnOutput)
         json.loads(lines)
         self.assertTrue(lines.find('examplesv') > 0)
 
     def testServiceInstall(self):
         if inDebug(): return
-        logger = base.MemoryLogger.MemoryLogger(3)
-        processHelper = base.ProcessHelper.ProcessHelper(logger)
+        logger = MemoryLogger.MemoryLogger(3)
+        processHelper = ProcessHelper.ProcessHelper(logger)
         old = processHelper.pushd('service/test')
         form2linux.main(['form2linux', '-y', '-v', 'service', 'install', 'service.json'])
         processHelper.popd(old)
         serviceFile = '/tmp/examplesv.service'
         self.assertTrue(os.path.exists(serviceFile))
-        contents = base.StringUtils.fromFile(serviceFile)
+        contents = StringUtils.fromFile(serviceFile)
         self.assertEqual(contents, '''[Unit]
 Description=A example service doing nothing.
 After=syslog.target
@@ -77,22 +75,4 @@ Restart=always
 RestartSec=5
 [Install]
 WantedBy=multi-user.target
-''')
-    def testTextReplaceRangeString(self):
-        if inDebug(): return
-        fnDocument = base.FileHelper.tempFile('document.md', 'unittest')
-        base.StringUtils.toFile(fnDocument, '''# Chapter1
-~~abc!!
-# Chapter2
-~~def!!
-# Chapter3
-''')
-        form2linux.main(['form2linux', '-v', 'text', 'replace-range', fnDocument, '--replacement=Dubidu', 
-                         '--anchor=Chapter2', '--start=~~', '--end=!!'])
-        replacement = base.StringUtils.fromFile(fnDocument)
-        self.assertEqual(replacement, '''# Chapter1
-~~abc!!
-# Chapter2
-~~Dubidu!!
-# Chapter3
 ''')

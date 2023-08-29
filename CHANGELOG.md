@@ -1,5 +1,22 @@
 # Changelog
 
+# [0.5.1] - 2023-08-27 adapt-variables php
+
+## Added
+- mode text: example-adapt-variable, adapt-variables
+- mode install: example-php, php
+- TextProcessor: adaptVariables(), insertByAnchor()
+- some commands stores the forms in /var/lib/form2linux/forms
+- text replace-range: --insert-position --insert
+
+
+## Changed
+- debian package: postinst2
+- documentation completed
+- text replace-range: default value of --min-length set to 1 (from 3)
+
+
+
 # [0.4.1] - 2023-08-27
 
 ## Added
@@ -13,6 +30,7 @@
 
 ## Changed
 - constructor of Builder: parameter options
+- using Builder._example() for example*()
 
 ## Fixed
 - SetupBuilder::exampleSystemInfo(): missing "

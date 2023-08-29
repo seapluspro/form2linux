@@ -17,6 +17,18 @@ from base import Logger
 from text import SearchRule
 from text import SearchRuleList
 
+class ReplaceStatus:
+    '''Stores a replacement status.
+    '''
+    def __init__(self):
+        self.hasFound = False
+        self.hasChanged = False
+        self.oldValue = None
+    
+    def clear(self):
+        self.hasFound = False
+        self.hasChanged = False
+        self.oldValue = None
 
 class TextProcessor:
     '''A processor for finding/modifying text.
@@ -33,6 +45,36 @@ class TextProcessor:
         self.lastState = None
         self.hasChanged = False
         self.traceFile = None
+
+    def adaptVariable(self, name: str, value: str, status: ReplaceStatus=None) -> bool:
+        '''Adapts a variable assignment NAME = VALUE 
+        @param name: the variable name
+        @param value: the variable value
+        @param status: OUT: the Status: found and changed
+        @return <em>True</em>: the variable has been found
+        '''
+        rc = False
+        ix = -1
+        regex = re.compile(f'^{name}\s*=\s*')
+        for line in self.lines:
+            ix += 1
+            matcher = regex.match(line)
+            if matcher is not None:
+                rc = True
+                if status is not None:
+                    status.hasFound = True
+                end = len(matcher.group(0))
+                oldValue = line[end:].strip()
+                hasChanged = oldValue != value
+                if status is not None:
+                    status.hasChanged = hasChanged
+                    if hasChanged:
+                        status.oldValue = oldValue
+                if hasChanged:
+                    self.lines[ix] = line[0:end] + value
+                    self.hasChanged = True
+                break
+        return rc
 
     def cursor(self, mode: str='both'):
         '''Returns the cursor as pair (line, col), or the line or the column, depending on mode.
@@ -83,6 +125,31 @@ class TextProcessor:
                 rc = ixLine
                 break
             ixLine += 1
+        return rc
+
+    def insertByAnchor(self, anchor: str, insertion: str, above=False):
+        '''Inserts a line at a position given by a regular expression or put that at the end.
+        @param anchor: the insertion position (regular expression)
+        @param insertion: the line to insert
+        @param above: <em>True</em>: the line is inserterted above the anchor
+        @return <em>True</em>: the anchor has been found
+        '''
+        rc = False
+        regex = re.compile(anchor)
+        ix = -1
+        for line in self.lines:
+            ix += 1
+            if regex.search(line):
+                self.lines.insert(ix if above else ix+1, insertion)
+                rc = True
+                break
+        if not rc:
+            last = len(self.lines) - 1
+            if last >= 0 and self.lines[last] == '':
+                self.lines[last] = insertion
+            else:
+                self.lines.append(insertion)
+        self.hasChanged = True
         return rc
 
     def insertOrReplace(self, key: str, line: str, anchor=None, above: bool=False):

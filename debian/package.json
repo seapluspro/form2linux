@@ -1,6 +1,6 @@
 {
   "Variables": {
-     "VERSION": "0.4.1",
+     "VERSION": "0.5.1",
      "PROJECT": "form2linux",
      "BASE": "usr/share/%(PROJECT)"
   },
@@ -39,7 +39,7 @@
   "Links": {
     "%(BASE)/README.md": "%(BASE)/doc/form2linux.md"
   },
-  "PostInstall": "",
+  "PostInstall": "scripts/postinst2",
   "PostRemove": ""
 }
 

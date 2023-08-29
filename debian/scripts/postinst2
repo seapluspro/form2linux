@@ -1,0 +1,4 @@
+for dir in installed log; do
+  mkdir -p /var/lib/form2task/$dir
+  chmod uog+rwx /var/lib/form2task/$dir
+done

@@ -11,12 +11,15 @@ import shutil
 import fnmatch
 import subprocess
 import time
+from typing import Sequence
 from text import JsonUtils
 from base import Const
 from base import MemoryLogger
 from base import ProcessHelper
 from base import StringUtils
 from base import FileHelper
+from text import TextProcessor
+
 
 class CLIError(Exception):
     '''Generic exception to raise and log different fatal errors.'''
@@ -31,9 +34,11 @@ class CLIError(Exception):
     def __unicode__(self):
         return self.msg
 
+
 class GlobalOptions:
     '''Stores the global program arguments.
     '''
+
     def __init__(self, verbose: bool, dry: bool, needsRoot: bool):
         '''Constructor.
         @param verbose: True: show info messages
@@ -44,16 +49,20 @@ class GlobalOptions:
         self.dry = dry
         self.needsRoot = needsRoot
 
+
 class BuilderStatus:
     '''Stores the logger. Needed for unittests.
     '''
     _lastLogger = None
+    underTest = False
+
     @staticmethod
     def setLogger(logger):
         '''Sets the logger
         @param logger: the new "global" logger
         '''
         BuilderStatus._lastLogger = logger
+
     @staticmethod
     def lastLogger():
         '''Return the last created logger.
@@ -61,19 +70,23 @@ class BuilderStatus:
         '''
         return BuilderStatus._lastLogger
 
+
 def lastLogger():
     '''Returns the last created instance of a logger.
     '''
     return BuilderStatus.lastLogger()
 
+
 class Builder:
     '''Base class of all manager classes of form2linux.
     '''
+
     def __init__(self, needsRoot: bool, options: GlobalOptions):
         '''Constructor.
         @param verbose: <em>True</em>: info messages will be displayed
         @param dry: <em>True</em>: says what to do, but do not change data
         '''
+        self._stateDirectory = '/tmp/unittest' if BuilderStatus.underTest else '/var/lib/form2linux'
         self._verboseLevel = 3
         self._verbose = options.verbose
         self._dry = options.dry
@@ -91,13 +104,63 @@ class Builder:
         self._baseDirectory = ''
         self._logger = MemoryLogger.MemoryLogger(Const.LEVEL_DETAIL)
         BuilderStatus.setLogger(self._logger)
-        self._processHelper = ProcessHelper.ProcessHelper.__init__(self, self._logger)
+        self._processHelper = ProcessHelper.ProcessHelper.__init__(
+            self, self._logger)
         self._standardDirectories = ('boot', 'dev', 'etc', 'etc/default', 'home', 'lib',
                                      'media', 'opt', 'run', 'sys',
                                      'tmp',
                                      'usr', 'usr/bin', 'usr/lib', 'usr/sbin', 'usr/share',
+                                     'usr/local', 'usr/local/bin',
                                      'var', 'var/cache', 'var/lib', 'var/spool',
                                      )
+
+    def _example(self, filename: str, text: str):
+        '''Shows the example for the configuration.
+        @param filename: None or the file to store
+        '''
+        if filename is None:
+            self.log(text)
+        else:
+            StringUtils.toFile(filename, text)
+
+    def _adaptVariables(self, filename: str, rules: Sequence[str], needsRoot: bool=False):
+        '''Makes the adaptions in a php.ini file.
+        @param filename: the file to adapt
+        @param rules: the list of rules: NAME|VALUE or NAME|VALUE|ANCHOR
+        @param needsRoot: <em>True</em>: file access needs root access
+        '''
+        status = TextProcessor.ReplaceStatus()
+        processor = TextProcessor.TextProcessor(self._logger)
+        processor.readFile(filename, True)
+        for rule in rules:
+            parts = rule.split('|')
+            status.clear()
+            if processor.adaptVariable(parts[0], parts[1], status):
+                if status.hasChanged:
+                    self.info(f'{parts[0]}: {status.oldValue} -> {parts[1]}')
+            else:
+                line = f'{parts[0]}={parts[1]}'
+                if len(parts) == 3:
+                    processor.insertByAnchor(parts[2], line)
+                else:
+                    last = len(processor.lines) - 1
+                    if last >= 0 and processor.lines[last] == '':
+                        processor.lines[last] = line
+                    else:
+                        processor.lines.append(line)
+                self.info(f'added: {line}')
+        if self.canWrite(needsRoot):
+            processor.writeFile(filename, f'{int(time.time())}')
+
+    def archiveForm(self, command: str, form: str):
+        '''Stores the form in the form archive for logging purpose.
+        @param command: the command that received the form
+        @param form: the filename of the form
+        '''
+        full = os.path.join(self._stateDirectory, 'forms',
+                            f'{command}.{int(time.time())}.{os.path.basename(form)}')
+        shutil.copy2(form, full)
+        self.info(f'# form saved as {full}')
 
     def error(self, message):
         '''Logs an error.
@@ -109,10 +172,10 @@ class Builder:
         '''Tests the entries of the "Directory" section.
         '''
         dirs = self.valueOf('Directories', 'a')
-        regExpr = re.compile(r'([:\s$])')
         for item in dirs:
             name = self.replaceVariables(item)
-            self.checkPattern('Directories', name, None, self._wrongFilenameChars)
+            self.checkPattern('Directories', name, None,
+                              self._wrongFilenameChars)
             if name.startswith('/'):
                 name = name[1:]
             self._dirs.append(name)
@@ -136,12 +199,13 @@ class Builder:
         '''Tests the entries of the "Links" section.
         '''
         files = self.valueOf('Links', 'm')
-        regExpr = re.compile(r'([:\s$])')
         for file in files:
             name = self.replaceVariables(file)
-            self.checkPattern(f'Links.{file} (source)', name, None, self._wrongFilenameChars)
+            self.checkPattern(f'Links.{file} (source)',
+                              name, None, self._wrongFilenameChars)
             target = self.replaceVariables(files[file])
-            self.checkPattern(f'Links.{file} (target)', target, None, self._wrongFilenameChars)
+            self.checkPattern(f'Links.{file} (target)',
+                              target, None, self._wrongFilenameChars)
             self._links[name] = target
 
     def checkLinksLate(self):
@@ -169,7 +233,8 @@ class Builder:
         if wrongCharacters is not None:
             matcher = re.search(wrongCharacters, value)
             if matcher is not None:
-                CLIError(f'''"{path.replace(' ', '.')}": wrong character "{matcher.group(0)}" in {value}''')
+                CLIError(
+                    f'''"{path.replace(' ', '.')}": wrong character "{matcher.group(0)}" in {value}''')
         return value
 
     def checkPattern(self, name: str, value: str, pattern: str, wrongCharacters: str=None, errorMessage: str=None):
@@ -188,7 +253,20 @@ class Builder:
         if wrongCharacters is not None:
             matcher = re.search(wrongCharacters, value)
             if matcher is not None:
-                CLIError(f'"{name}": wrong character "{matcher.group(0)}" in {value}')
+                CLIError(
+                    f'"{name}": wrong character "{matcher.group(0)}" in {value}')
+
+    def checkRules(self, rules: Sequence[str], name: str, target: Sequence[str]):
+        '''Checks the rules for replacement in configuration file with variables.
+        @param rules: the rules to check
+        @param name: for logging
+        @param target: the result list
+        '''
+        for rule in rules:
+            parts = rule.split('|')
+            if len(parts) not in (2, 3):
+                raise CLIError(f'{name}: not 2 or 3 parts delimited by "|": {rule}"')
+            target.append(rule)
 
     def copyFile(self, source: str, target: str):
         '''Copies a file if the dry mode is not on.
@@ -232,7 +310,8 @@ class Builder:
         '''
         for counter in range(2):
             for key in self._variables:
-                self._variables[key] = self.replaceVariables(self._variables[key])
+                self._variables[key] = self.replaceVariables(
+                    self._variables[key])
         if counter > 2:
             self.error('Ups')
 
@@ -241,7 +320,8 @@ class Builder:
         '''
         # pylint: disable-next=consider-using-dict-items
         for item in self._dirs:
-            subDir = os.path.join(self._baseDirectory, self.replaceVariables(item))
+            subDir = os.path.join(self._baseDirectory,
+                                  self.replaceVariables(item))
             if not os.path.exists(subDir):
                 self.info(f'creating  {subDir}/')
                 self.makeDirectory(subDir)
@@ -254,7 +334,8 @@ class Builder:
         for item, value in self._files.items():
             source = self.replaceVariables(item)
             hasWildcard = self.hasWildcard(source)
-            target = os.path.join(self._baseDirectory, self.replaceVariables(value))
+            target = os.path.join(self._baseDirectory,
+                                  self.replaceVariables(value))
             if target.endswith('/'):
                 baseTarget = target[0:-1]
                 nodeTarget = os.path.basename(source)
@@ -288,6 +369,19 @@ class Builder:
         if self._verbose:
             self._logger.info(message)
 
+    def installPackages(self, packages: Sequence[str]):
+        '''Installs a set of packages.
+        @param packages: the array of packages
+        '''
+        current = time.time()
+        self.updatePackages()
+        cmd = f"apt-get -y install {' '.join(self._packages)}"
+        self.runProgram(cmd, True, True)
+        for package in packages:
+            full = os.path.join(self._stateDirectory, 'installed', package)
+            with open(full, 'a') as fp:
+                fp.write(f'{current:0.0f}\n')
+
     def log(self, message):
         '''Logs a message.
         @param message: the message to log
@@ -318,8 +412,9 @@ class Builder:
         @param asRoot: <em>None</em>: use the default value. <em>True</em>: action needs being root
         @return: <em>True</em>: action needs being root
         '''
-        #if not self._dry and (not asRoot or os.geteuid() == 0):
-        rc = not self._dry and (not self.needsRoot(asRoot) or os.geteuid() == 0)
+        # if not self._dry and (not asRoot or os.geteuid() == 0):
+        rc = not self._dry and (
+            not self.needsRoot(asRoot) or os.geteuid() == 0)
         return rc
 
     def replaceVariables(self, value: str) -> str:
@@ -333,7 +428,7 @@ class Builder:
                 value = value.replace(variable, value2)
         return value
 
-    def runProgram(self, command: str, asRoot: bool=None, verbose: bool=True, outputFile: str=None):
+    def runProgram(self, command: str, asRoot: bool=None, verbose: bool=True, outputFile: str=None, separator: str=' '):
         '''Runs a program if it possible or print the command if not.
         @param command: the command to execute
         @param asRoot: <em>True</em>: the command must be executed as root
@@ -341,7 +436,7 @@ class Builder:
         @param outputFile: <em>None</em> or the file where the program output is stored
         '''
         if self.canWrite(asRoot):
-            output = subprocess.check_output(command.split(' '))
+            output = subprocess.check_output(command.split(separator))
             if outputFile is not None:
                 StringUtils.toFile(outputFile, output.decode('utf-8'))
             elif verbose and output != b'':
@@ -357,7 +452,8 @@ class Builder:
         '''
         if os.path.exists(filename):
             unique = int(time.time())
-            self.runProgram(f'mv -v {filename} {filename}.{unique}', True, True)
+            self.runProgram(
+                f'mv -v {filename} {filename}.{unique}', True, True)
 
     def setVariable(self, name, value):
         '''Sets a variable.
@@ -366,7 +462,28 @@ class Builder:
         '''
         self._variables[name] = value
 
-    def valueOf(self, path: str, nodeType: str='s') -> str:
+    def setStateDirectory(self, directory: str):
+        '''Sets the directory for logging / storing states.
+        @param directory: the directory to set
+        '''
+        self._stateDirectory = directory
+
+    def updatePackages(self, force: bool=False):
+        '''Starts the "apt-get update" command if needed.
+        @param force: <em>False</em>: starts only if the last update is older than one day
+        '''
+        current = time.time()
+        latest = os.path.join(self._stateDirectory, 'last_update.mrk')
+        if not os.path.exists(latest):
+            fileTime = 0
+        else:
+            fileTime = os.path.getmtime(latest)
+        if fileTime + 86400 < current:
+            self.runProgram('apt-get update', True, True)
+            if self.canWrite(False):
+                StringUtils.toFile(latest, f'{current:0.0f}', 0o666)
+        
+    def valueOf(self, path: str, nodeType: str='s'):
         '''Gets a node of a Json tree.
         @param path: a blank separated list of access nodes
         @param nodeType: the node must have that node type

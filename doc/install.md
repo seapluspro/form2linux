@@ -6,14 +6,19 @@ The components must be defined in a Json form.
 
 ### Usage
 ```
-usage: form2linux.py install [-h] {standard-host,example-standard-host} ...
+usage: form2linux.py text [-h]
+                          {adapt-variables,example-adapt-variables,replace-range}
+                          ...
 
 positional arguments:
-  {standard-host,example-standard-host}
-                        install help
-    standard-host       prepares a standard linux host
-    example-standard-host
-                        shows an example configuration of the command "standard-host"
+  {adapt-variables,example-adapt-variables,replace-range}
+                        text help
+    adapt-variables     replaces variables in a configuration file if needed.
+    example-adapt-variables
+                        shows an example form for the command "adapt-
+                        variables".
+    replace-range       replaces a section in text document with a string or a
+                        file.
 
 options:
   -h, --help            show this help message and exit
@@ -40,7 +45,7 @@ The variable can be used at any position of the form (including in other variabl
 with the syntax %&lt;<name>), for example %(SERVICE).
 
 
-### The Form example-standard-host
+### The Form standard-host
 <code>form2linux install example-standard-host</code> shows the following:
 ```
 {
@@ -51,7 +56,7 @@ with the syntax %&lt;<name>), for example %(SERVICE).
   "Packages": [
       "htop iotop tmux bzip2 zip unzip rsync sudo zram-tools smartmontools wget curl",
       "nfs-common nfs-kernel-server nmap openssh-server iotop jnettop ssl-cert ca-certificates net-tools ntp",
-      "ssmtp shareutils",
+      "ssmtp sharutils"
   ],
   "Ssmtp": {
       "Directory": "/etc/ssmtp",
@@ -63,7 +68,6 @@ with the syntax %&lt;<name>), for example %(SERVICE).
       "Mode": "StartTLS"
   }
 }
-
 ```
 
 #### ConfigurationDirectory

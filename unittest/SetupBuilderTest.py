@@ -6,6 +6,7 @@ Created on: 20.08.2023
    License: CC0 1.0 Universal
 '''
 import json
+import re
 import unittest
 import form2linux
 import Builder
@@ -39,12 +40,13 @@ class SetupF2LTest(unittest.TestCase):
 ''')
         form2linux.main(['form2linux', '-v', 'setup', 'add-standard-users', fnForm])
         logger = Builder.BuilderStatus.lastLogger()
-        lines = '\n'.join(logger.getMessages()) + '\n'
+        lines = re.sub(r'\.\d+', '.X', '\n'.join(logger.getMessages())) + '\n'
         self.assertEquals(lines, '''+++ user id 33 [bupwrong] already exists: www-data
 # user bin already exists
 +++ user daemon already exists with another uid: 444 / 1
 +++ group daemon already exists with another uid: 444 / 1
 # group bin already exists
+# form saved as /var/lib/form2linux/forms/add-standard-users.X.stdusers.json
 sudo groupadd -g 230 bupsample
 sudo useradd -m --no-user-group -g 230 -c "does not exist_ colon" -d /bin/bash -s /bin/bash bupsample
 ''')

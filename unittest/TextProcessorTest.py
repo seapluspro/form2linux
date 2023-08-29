@@ -6,7 +6,6 @@ Created on: 20.08.2023
    License: CC0 1.0 Universal
 '''
 import unittest
-from base import StringUtils
 from base import FileHelper
 from base import MemoryLogger
 from text import TextProcessor
@@ -323,6 +322,72 @@ strVar = "abc $strVar"
         processor.insertOrReplace(r'LLL=', 'LLL=blub', 'not available', above=True)
         self.assertEqual(6, len(processor.lines))
         self.assertEqual('LLL=blub', processor.lines[5])
+
+    def testAdaptVariable(self):
+        processor = TextProcessor.TextProcessor(self._logger)
+        processor.traceFile = self._trace
+        processor.setContent('''# a file
+max=4
+min = 3
+string = "Hello World"
+''')
+        status = TextProcessor.ReplaceStatus()
+        self.assertFalse(processor.hasChanged)
+        self.assertTrue(processor.adaptVariable('max', '99', status))
+        self.assertTrue(status.hasChanged)
+        self.assertTrue(status.hasFound)
+        self.assertEqual(processor.lines[1], 'max=99')
+        self.assertTrue(processor.hasChanged)
+        processor.hasChanged = False
+        status.clear()
+        self.assertFalse(status.hasChanged)
+        self.assertFalse(status.hasFound)
+        self.assertTrue(processor.adaptVariable('min', '10', status))
+        self.assertTrue(status.hasChanged)
+        self.assertTrue(status.hasFound)
+        self.assertEqual(processor.lines[2], 'min = 10')
+        self.assertTrue(processor.hasChanged)
+        status.clear()
+        processor.hasChanged = False
+        self.assertTrue(processor.adaptVariable('string', '"Servus beinand"', status))
+        self.assertTrue(status.hasChanged)
+        self.assertTrue(status.hasFound)
+        self.assertEqual(processor.lines[3], 'string = "Servus beinand"')
+        self.assertTrue(processor.hasChanged)
+        status.clear()
+        processor.hasChanged = False
+
+        self.assertTrue(processor.adaptVariable('max', '99', status))
+        self.assertFalse(status.hasChanged)
+        self.assertTrue(status.hasFound)
+        self.assertEqual(processor.lines[1], 'max=99')
+        self.assertFalse(processor.hasChanged)
+        status.clear()
+        processor.hasChanged = False
+        self.assertFalse(processor.adaptVariable('unknown', '99', status))
+        self.assertFalse(status.hasChanged)
+        self.assertFalse(status.hasFound)
+        self.assertEqual(processor.lines[1], 'max=99')
+        self.assertFalse(processor.hasChanged)
+
+    def testInsertByAnchor(self):
+        processor = TextProcessor.TextProcessor(self._logger)
+        processor.traceFile = self._trace
+        processor.setContent('''# a file
+max=4
+min = 3
+string = "Hello World"
+''')
+        processor.insertByAnchor(r'max', 'line1')
+        processor.insertByAnchor(r'min', 'line2', True)
+        processor.insertByAnchor(r'unknown', 'line3', True)
+        self.assertEqual('\n'.join(processor.lines), '''# a file
+max=4
+line1
+line2
+min = 3
+string = "Hello World"
+line3''')
 
 if __name__ == '__main__':
     #import sys;sys.argv = ['', 'Test.testName']

@@ -6,6 +6,7 @@ Created on: 20.08.2023
    License: CC0 1.0 Universal
 '''
 import re
+import os.path
 import json
 import unittest
 import form2linux
@@ -51,7 +52,8 @@ class InstallF2LTest(unittest.TestCase):
         form2linux.main(['form2linux', '-v', 'install', 'standard-host', fnForm])
         logger = Builder.BuilderStatus.lastLogger()
         lines = re.sub(r'\.\d+', '.X', '\n'.join(logger.getMessages())) + '\n'
-        self.assertEquals(lines, '''sudo apt-get -y install htop ssmtp shareutils
+        self.assertEquals(lines, '''# form saved as /tmp/unittest/forms/standard-host.X.stdusers.json
+sudo apt-get -y install htop ssmtp shareutils
 sudo mv -v /tmp/ssmtp/ssmtp.conf /tmp/ssmtp/ssmtp.conf.X
 sudo mv -v /tmp/ssmtp/revaliases /tmp/ssmtp/revaliases.X
 ''')
@@ -71,3 +73,97 @@ AuthPass=TopSecret
 UseSTARTTLS=YES
 TLS_CA_File=/etc/pki/tls/certs/ca-bundle.crt
 ''')
+
+    def testExamplePhp(self):
+        if inDebug(): return
+        fnOutput = FileHelper.tempFile('php.example', 'unittest')
+        form2linux.main(['form2linux', 'install', 'example-php', f'--file={fnOutput}'])
+        lines = StringUtils.fromFile(fnOutput)
+        json.loads(lines)
+        self.assertTrue(lines.find('/etc/php/%(VERSION)') >= 0)
+
+    def testPhp(self):
+        if inDebug(): return
+        Builder.BuilderStatus.underTest = True
+        packageStatus1 = FileHelper.tempFile('php8.2-curl', 'unittest/installed')
+        _ = FileHelper.tempFile('php8.2-curl', 'unittest/forms/php.json')
+        fnFpm = FileHelper.tempFile('php.ini', 'unittest/fpm')
+        fnCli = FileHelper.tempFile('php.ini', 'unittest/cli')
+        StringUtils.toFile(fnFpm, '''; any value
+memory_limit = 128M
+; https://php.net/upload-max-filesize
+upload_max_filesize = 2M
+[Session]
+session.save_handler = files
+;session.save_path = "/var/lib/php/sessions"
+[opcache]
+; Determines if Zend OPCache is enabled
+;opcache.enable=1
+;opcache.memory_consumption=128
+;opcache.interned_strings_buffer=8
+[Debug]
+''')
+        fnFpm = FileHelper.tempFile('php.ini', 'unittest/cli')
+        StringUtils.toFile(fnFpm, '''; any value
+memory_limit = 144M
+; https://php.net/upload-max-filesize
+upload_max_filesize = 2M
+''')
+        fnForm = FileHelper.tempFile('stdusers.json', 'unittest')
+        StringUtils.toFile(fnForm, r'''{
+  "Variables": {
+    "VERSION": "8.2"
+  },
+  "ConfigurationDirectory": "/tmp/unittest/",
+  "Repository": { 
+      "File": "/tmp/unittest/php.list", 
+      "Contents": "deb https://packages.sury.org/php/ bookworm main",
+      "Initialization": [
+        "rm -f /tmp/php.gpg",
+        "wget -qO /tmp/php.gpg https://packages.sury.org/php/apt.gpg",
+        "cp -a /tmp/php.gpg /tmp/unittest/php2.gpg"
+      ]
+   },
+  "Comment": "php8.2-xdebug php8.2-pgsql",
+  "Packages": [
+      "php%(VERSION) php%(VERSION)-curl",
+      "php%(VERSION)-zip"
+  ],
+  "FpmReplacements": [
+    "memory_limit|2048M",
+    "upload_max_filesize|512M",
+    "session.save_handler|redis|^\\[Session\\]",
+    "session.save_path|\"tcp://127.0.0.1:6379\"|^session.save_handler",
+    "opcache.enable|1|^.opcache",
+    "opcache.memory_consumption|1024|opcache.enable",
+    "opcache.interned_strings_buffer|512|^opcache.memory_consumption"
+  ],
+  "CliReplacements": [
+    "default_socket_timeout|600"
+  ]
+}''')
+        form2linux.main(['form2linux', '-v', 'install', 'php', fnForm])
+        logger = Builder.BuilderStatus.lastLogger()
+        lines = re.sub(r'\.\d+', '.X', '\n'.join(logger.getMessages())) + '\n'
+        self.assertEqual(lines, '''# form saved as /tmp/unittest/forms/php.X.stdusers.json
+sudo apt-get -y install php8.X php8.X-curl php8.X-zip
+memory_limit: 128M -> 2048M
+upload_max_filesize: 2M -> 512M
+session.save_handler: files -> redis
+added: session.save_path="tcp://127.X.X.X:6379"
+added: opcache.enable=1
+added: opcache.memory_consumption=1024
+added: opcache.interned_strings_buffer=512
+renaming /tmp/unittest/fpm/php.ini => /tmp/unittest/fpm/php.X
+added: default_socket_timeout=600
+renaming /tmp/unittest/cli/php.ini => /tmp/unittest/cli/php.X
+''')
+        self.assertTrue(os.path.exists(packageStatus1))
+        lines = StringUtils.fromFile(fnCli)
+        self.assertEqual(lines, '''; any value
+memory_limit = 144M
+; https://php.net/upload-max-filesize
+upload_max_filesize = 2M
+default_socket_timeout=600''')
+
+

@@ -163,6 +163,7 @@ class SetupBuilder (Builder):
         @param form: the name of the form with Json format
         '''
         self.checkStandardUsers(form)
+        self.archiveForm('add-standard-users', form)
         for group, gid in self._groups.items():
             system = '' if gid < 1000 else '--system '
             self.runProgram(f'groupadd {system}-g {gid} {group}', True)

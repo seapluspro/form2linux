@@ -1,8 +1,12 @@
-#! /bin/bash
+#! /bin/bash -x
 set -e
 PATH=/usr/bin:/bin
 BASE=/usr/share/form2linux
-for dir in base text; do
-  rm -Rf $BASE/$dir/__pycache__
-done
 rm -f $BASE/doc/form2linux.md
+for dir in base text doc; do
+  rm -Rf $BASE/$dir/__pycache__
+  rm -f $BASE/$dir/*
+done
+rm -Rf __pycache__/
+rm -f *.py *.md
+exit 0
