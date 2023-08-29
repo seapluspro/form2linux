@@ -33,6 +33,8 @@ The Python script form2task is a command line tool with the following options:
 
 
 ## form2task -h
+The call <code>form2linux -h</code> show the following:
+
 ```
 usage: form2linux.py [-h] [-v] [-V] [-y] [-n] [-R]
                      {install,package,service,setup,text} ...

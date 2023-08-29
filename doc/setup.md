@@ -12,8 +12,12 @@ The task "Setup" contains tools to setup a new system and backup/restore:
 - example-system-info: shows the configuration of "system-info"
 
 ### Examples
+The call <code>form2linux setup -h</code> show the following:
+
 ```
 form2linux setup --help
+form2linux setup adapt-users --help
+
 form2linux setup adapt-users /backup/passwd /backup/group /backup/shadow
 
 form2linux setup example-add-standard-users myform.json

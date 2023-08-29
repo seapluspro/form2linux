@@ -1,5 +1,7 @@
 # Changelog
 
+# [0.5.2] - 2023-08-27 documentation completed
+
 # [0.5.1] - 2023-08-27 adapt-variables php
 
 ## Added

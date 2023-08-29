@@ -5,6 +5,8 @@ The task "package" builds a debian package archive (*.deb) from its components.
 The components must be defined in a Json form.
 
 ### Usage
+The call <code>form2linux package -h</code> show the following:
+
 ```
 usage: form2linux.py package [-h] {example,check,build} ...
 
@@ -21,9 +23,9 @@ options:
 ```
 
 ### Examples
-The command task2linux service example shows the following:
 ```
 form2linux package -h
+form2linux package build -h
 
 form2linux package example >package.json
 # Modify the file package.json with your requests
@@ -34,60 +36,18 @@ form2linux package build package.json
 ### The Form
 The call <code>form2linux package example</code> shows:
 ```
-{
-  "Variables": {
-     "VERSION": "0.6.3",
-     "BASE": "usr/share/cppknife-%(VERSION)"
-  },
-  "Project": {
-    "Package": "cppknife",
-    "Version": "%(VERSION)",
-    "Architecture": "amd64",
-    "Maintainer": "SeaPlusPro <seapluspro@gmail.com>",
-    "Replaces": "",
-    "Depends": {
-      "libc6": ">= 2.36",
-      "libgdal-dev": ""
-      },
-    "Provides": "*",
-    "Suggests": [
-      "cppknife-db"
-      ],
-    "Homepage": "https://github.com/seapluspro/cppknife",
-    "Description": "Shared libraries for C++ programming and tools using that.",
-    "Notes": [
-      "The heart is the shared library libcppknife as a helper for fast programming a command line C++ program.",
-      "Also there are the programs textknife, fileknife, geoknife, sesknife, osknife which demonstrate the usage of the library."
-    ]
-  },
-  "Directories": [
-    "%(BASE)"
-    ],
-  "Files": {
-    "../build.release/libcppknife-%(VERSION).so": "%(BASE)/",
-    "../build.release/libcppknifegeo-%(VERSION).so": "%(BASE)/",
-    "../build.release/fileknife": "%(BASE)/",
-    "../build.release/textknife": "%(BASE)/",
-    "../build.release/sesknife": "%(BASE)/",
-    "../basic/*.hpp": "%(BASE)/basic/",
-    "../db/*.hpp": "%(BASE)/db/",
-    "../core/*.hpp": "%(BASE)/core/",
-    "../net/*.hpp": "%(BASE)/net/",
-    "../geo/*.hpp": "%(BASE)/geo/",
-    "../text/*.hpp": "%(BASE)/text/",
-    "../tools/*.hpp": "%(BASE)/tools/"
-  },
-  "Links": {
-    "%(BASE)/libcppknife-%(VERSION).so": "usr/lib/",
-    "%(BASE)/libcppknifegeo-%(VERSION).so": "usr/lib/",
-    "%(BASE)/fileknife": "usr/local/bin/",
-    "%(BASE)/textknife": "usr/local/bin/",
-    "%(BASE)/sesknife": "usr/local/bin/"
-  },
-  "PostInstall": "postinst2",
-  "PostRemove": ""
-}
+usage: form2linux.py package [-h] {example,check,build} ...
 
+positional arguments:
+  {example,check,build}
+                        package help
+    example             shows an example configuration file. Can be used for
+                        initializing a new package project.
+    check               checks the configuration file
+    build               builds the debian package
+
+options:
+  -h, --help            show this help message and exit
 ```
 
 ### Description:

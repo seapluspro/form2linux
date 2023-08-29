@@ -5,6 +5,8 @@ The task "Service" creates a simple SystemD service from its components.
 The components must be defined in a Json form.
 
 ### Usage
+The call <code>form2linux service -h</code> show the following:
+
 ```
 usage: form2linux.py service [-h] {example,check,install} ...
 
@@ -32,41 +34,19 @@ form2linux service install service.json
 ### The Form
 <code>form2linux service example</code> shows the following:
 ```
-{
-  "Variables": {
-    "SERVICE": "examplesv",
-    "USER": "nobody",
-    "SCRIPT_NODE": "%(SERVICE)",
-    "SCRIPT": "/usr/local/bin/%(SCRIPT_NODE)"
-  },
-  "Service": {
-    "Name": "%(SERVICE)",
-    "Description": "A example service doing nothing.",
-    "File": "/etc/systemd/system/%(SERVICE).service",
-    "User": "%(USER)",
-    "Group": "%(USER)",
-    "WorkingDirectory": "/tmp",
-    "EnvironmentFile": "-/etc/%(SERVICE)/%(SERVICE).env",
-    "ExecStart": "%(SCRIPT) daemon",
-    "ExecReload": "%(SCRIPT) reload",
-    "SyslogIdentifier": "%(SERVICE)",
-    "StandardOutput": "syslog",
-    "StandardError": "syslog",
-    "Restart": "always",
-    "RestartSec": 5
-  },
-  "Directories": [
-    "/usr/local/bin",
-    "/etc/%(SERVICE)"
-  ],
-  "Files": {
-    "scripts/%(SCRIPT_NODE)": "/etc/%(SERVICE)/"
-  },
-  "Links": {
-    "/etc/%(SERVICE)/": "/usr/local/bin/%(SERVICE)"
-  }
-}
+usage: form2linux.py service [-h] {example,check,install} ...
 
+positional arguments:
+  {example,check,install}
+                        service help
+    example             shows an example configuration file. Can be used as
+                        template for a new service.
+    check               checks the configuration file
+    install             Installs a systemd service defined by a Json
+                        configuration file.
+
+options:
+  -h, --help            show this help message and exit
 ```
 
 #### Variables

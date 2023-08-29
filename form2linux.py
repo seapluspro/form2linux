@@ -41,7 +41,7 @@ from InstallBuilder import InstallBuilder
 from Builder import CLIError, GlobalOptions
 
 __all__ = []
-__version__ = '0.5.1'
+__version__ = '0.5.2'
 __date__ = '2023-08-20'
 __updated__ = '2023-08-29'
 
